@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <title>Mini Image Editor</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            font-family: sans-serif;
+        }
+
+        #toolbar {
+            background: #ddd;
+            padding: 5px;
+        }
+
+        #editor {
+            position: relative;
+            width: 1000vw;
+            height: calc(1000vh - 400px);
+            /* subtract toolbar height, scaled for 10x size */
+            overflow: hidden;
+            background: #f0f0f0;
+            border-top: 1px solid #aaa;
+        }
+
+        #editor-container {
+            position: relative;
+            width: 100vw;
+            height: calc(100vh - 40px);
+            overflow: hidden;
+            background: #f0f0f0;
+            border-top: 1px solid #aaa;
+        }
+
+        #editor-container.panning {
+            cursor: grab;
+        }
+
+        #editor-container.panning:active {
+            cursor: grabbing;
+        }
+
+        .item {
+            border: 1px solid transparent;
+            box-sizing: content-box;
+            position: absolute;
+            cursor: move;
+            user-select: none;
+            -webkit-user-drag: none;
+            -khtml-user-drag: none;
+            -moz-user-drag: none;
+            -o-user-drag: none;
+            user-drag: none;
+            pointer-events: auto;
+        }
+
+        .guide-line {
+            position: absolute;
+            width: 2px;
+            background-color: rgba(0, 0, 255, 0.5);
+            opacity: 0.8;
+            pointer-events: none;
+            z-index: 9999;
+            transform-origin: center center;
+            display: none;
+
+        }
+
+        .guide-line.left {
+            transform: rotate(-60deg);
+        }
+
+        .guide-line.right {
+            transform: rotate(60deg);
+        }
+
+        .item:hover {
+            border: 1px solid rgba(0, 0, 255, 0.5);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="toolbar">
+        <input type="file" id="fileInput" multiple accept="image/*">
+        <input type="file" id="tilingInput" accept="image/*" style="display: none;">
+        <input type="file" id="loadSceneInput" multiple accept=".json,image/*" style="display: none;">
+        <button id="tilingBtn">Add Tiling Background</button>
+        <button id="loadSceneBtn">Load Scene</button>
+        <button id="exportBtn">Export JSON</button>
+    </div>
+
+    <div id="editor-container">
+        <div id="editor"></div>
+    </div>
+
+    <script>
+        const editor = document.getElementById('editor');
+        const editorContainer = document.getElementById('editor-container');
+        const fileInput = document.getElementById('fileInput');
+        const tilingInput = document.getElementById('tilingInput');
+        const tilingBtn = document.getElementById('tilingBtn');
+        const loadSceneInput = document.getElementById('loadSceneInput');
+        const loadSceneBtn = document.getElementById('loadSceneBtn');
+        const exportBtn = document.getElementById('exportBtn');
+
+        let items = []; // {id, type, x, y, el}
+        let tilingSprite = null; // {id, el, width, height}
+        let typeCounters = {}; // Track count of each type
+        let hoveredItem = null; // Track currently hovered item for deletion
+
+        // Panning variables
+        let isPanning = false;
+        let isSpacePressed = false;
+        let panStartX = 0;
+        let panStartY = 0;
+        let editorOffsetX = 0;
+        let editorOffsetY = 0;
+
+        // Function to update z-index for all items based on their bottom position
+        function updateAllZIndexes() {
+            items.forEach(item => {
+                const rect = item.el.getBoundingClientRect();
+                const editorRect = editor.getBoundingClientRect();
+                const relativeBottom = rect.bottom - editorRect.top;
+                item.el.style.zIndex = Math.floor(relativeBottom).toString();
+            });
+        }
+
+        // Function to create guide lines for an item
+        function createGuideLines(item) {
+            // Create left guide line
+            const leftLine = document.createElement('div');
+            leftLine.className = 'guide-line left';
+            leftLine.id = `guide-left-${item.id}-${item.type}`;
+            editor.appendChild(leftLine);
+
+            // Create right guide line
+            const rightLine = document.createElement('div');
+            rightLine.className = 'guide-line right';
+            rightLine.id = `guide-right-${item.id}-${item.type}`;
+            editor.appendChild(rightLine);
+
+            return { left: leftLine, right: rightLine };
+        }
+
+        // Function to position guide lines at the center bottom of an item
+        function positionGuideLines(item, guideLines) {
+            const rect = item.el.getBoundingClientRect();
+            const editorRect = editor.getBoundingClientRect();
+
+            // Calculate center bottom position relative to editor
+            const centerX = (rect.left - editorRect.left) + rect.width / 2;
+            const bottomY = rect.bottom - editorRect.top;
+
+            // Calculate line height (extend lines in both directions for full visibility)
+            const lineHeight = Math.max(editorRect.height, editorRect.width) * 2;
+
+            // Position both lines at the center bottom of the item
+            // The lines will extend both upwards and downwards from the intersection point
+            [guideLines.left, guideLines.right].forEach(line => {
+                line.style.left = (centerX - 1) + 'px'; // -1 to center the 2px wide line
+                line.style.top = (bottomY - lineHeight / 2) + 'px'; // Center the line at the intersection point
+                line.style.height = lineHeight + 'px';
+            });
+        }
+
+        // Function to show guide lines for an item
+        function showGuideLines(item) {
+            console.log('showGuideLines called for:', item.id, item.type);
+            // Check if guide lines already exist
+            let leftLine = document.getElementById(`guide-left-${item.id}-${item.type}`);
+            let rightLine = document.getElementById(`guide-right-${item.id}-${item.type}`);
+
+            if (!leftLine || !rightLine) {
+                console.log('Creating new guide lines');
+                const guideLines = createGuideLines(item);
+                leftLine = guideLines.left;
+                rightLine = guideLines.right;
+            } else {
+                console.log('Using existing guide lines');
+            }
+
+            // Position and show the lines
+            positionGuideLines(item, { left: leftLine, right: rightLine });
+            leftLine.style.display = 'block';
+            rightLine.style.display = 'block';
+            console.log('Guide lines should now be visible');
+        }
+
+        // Function to hide guide lines for an item
+        function hideGuideLines(item) {
+            const leftLine = document.getElementById(`guide-left-${item.id}-${item.type}`);
+            const rightLine = document.getElementById(`guide-right-${item.id}-${item.type}`);
+
+            if (leftLine) leftLine.style.display = 'none';
+            if (rightLine) rightLine.style.display = 'none';
+        }
+
+        // Function to remove guide lines for an item (when item is deleted)
+        function removeGuideLines(item) {
+            const leftLine = document.getElementById(`guide-left-${item.id}-${item.type}`);
+            const rightLine = document.getElementById(`guide-right-${item.id}-${item.type}`);
+
+            if (leftLine) leftLine.remove();
+            if (rightLine) rightLine.remove();
+        }
+
+        // Function to delete an item
+        function deleteItem(item) {
+            console.log('Deleting item:', item.id, item.type);
+
+            // Remove guide lines
+            removeGuideLines(item);
+
+            // Remove the element from DOM
+            item.el.remove();
+
+            // Remove from items array
+            const index = items.findIndex(i => i.id === item.id && i.type === item.type);
+            if (index !== -1) {
+                items.splice(index, 1);
+            }
+
+            // Clear hovered item if it was the deleted one
+            if (hoveredItem === item) {
+                hoveredItem = null;
+            }
+
+            // Update z-indexes after deletion
+            updateAllZIndexes();
+
+            console.log('Item deleted successfully');
+        }
+
+        // Function to clear the current scene
+        function clearScene() {
+            // Remove all items and their guide lines
+            items.forEach(item => {
+                removeGuideLines(item);
+                item.el.remove();
+            });
+            items = [];
+
+            // Remove tiling sprite if exists
+            if (tilingSprite) {
+                tilingSprite.el.remove();
+                tilingSprite = null;
+            }
+
+            // Reset type counters
+            typeCounters = {};
+        }
+
+        fileInput.addEventListener('change', (e) => {
+            for (const file of e.target.files) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = document.createElement('img');
+                    img.src = event.target.result;
+                    img.className = 'item';
+                    img.style.left = '0px';
+                    img.style.top = '0px';
+                    editor.appendChild(img);
+
+                    const type = file.name.split('.')[0];
+
+                    // Initialize counter for this type if it doesn't exist
+                    if (!typeCounters[type]) {
+                        typeCounters[type] = 0;
+                    }
+
+                    // Increment counter and use it as id
+                    typeCounters[type]++;
+                    const id = typeCounters[type];
+
+                    const item = { id, type, x: 0, y: 0, el: img };
+                    items.push(item);
+
+                    makeDraggable(img, item);
+
+                    // Update z-indexes after adding new item
+                    img.onload = () => {
+                        updateAllZIndexes();
+                    };
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Tiling sprite functionality
+        tilingBtn.addEventListener('click', () => {
+            tilingInput.click();
+        });
+
+        // Load scene functionality
+        loadSceneBtn.addEventListener('click', () => {
+            loadSceneInput.click();
+        });
+
+        // Panning functionality
+        function updateEditorPosition() {
+            editor.style.transform = `translate(${editorOffsetX}px, ${editorOffsetY}px)`;
+        }
+
+        // Keyboard event listeners for spacebar and delete
+        document.addEventListener('keydown', (e) => {
+            if (e.key === ' ' && !isSpacePressed) {
+                e.preventDefault();
+                isSpacePressed = true;
+                editorContainer.classList.add('panning');
+            } else if (e.key === 'Delete' && hoveredItem) {
+                e.preventDefault();
+                deleteItem(hoveredItem);
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.key === ' ') {
+                e.preventDefault();
+                isSpacePressed = false;
+                isPanning = false;
+                editorContainer.classList.remove('panning');
+            }
+        });
+
+        // Mouse event listeners for panning
+        editorContainer.addEventListener('mousedown', (e) => {
+            if (isSpacePressed) {
+                e.preventDefault();
+                isPanning = true;
+                panStartX = e.clientX;
+                panStartY = e.clientY;
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isPanning && isSpacePressed) {
+                e.preventDefault();
+                const deltaX = e.clientX - panStartX;
+                const deltaY = e.clientY - panStartY;
+
+                editorOffsetX += deltaX;
+                editorOffsetY += deltaY;
+
+                updateEditorPosition();
+
+                panStartX = e.clientX;
+                panStartY = e.clientY;
+            }
+        });
+
+        document.addEventListener('mouseup', (e) => {
+            if (isPanning) {
+                e.preventDefault();
+                isPanning = false;
+            }
+        });
+
+        tilingInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                const file = e.target.files[0];
+
+                // Remove existing tiling sprite if any
+                if (tilingSprite) {
+                    tilingSprite.el.remove();
+                }
+
+                // Create tiling data for the new sprite
+                const type = file.name.split('.')[0];
+                const tilingData = {
+                    id: type + '_tiling',
+                    type: type
+                };
+
+                // Reuse the loadTilingSprite function
+                loadTilingSprite(file, tilingData);
+            }
+        });
+
+        // Load scene input handler
+        loadSceneInput.addEventListener('change', (e) => {
+            if (e.target.files.length === 0) return;
+
+            const files = Array.from(e.target.files);
+            const jsonFile = files.find(file => file.name.toLowerCase().endsWith('.json'));
+            const imageFiles = files.filter(file => file.type.startsWith('image/'));
+
+            if (!jsonFile) {
+                alert('Please select a JSON file along with the images.');
+                // Clear the input value to allow reselection
+                e.target.value = '';
+                return;
+            }
+
+            // Clear current scene
+            clearScene();
+
+            // Read the JSON file
+            const jsonReader = new FileReader();
+            jsonReader.onload = (event) => {
+                try {
+                    const sceneData = JSON.parse(event.target.result);
+                    loadScene(sceneData, imageFiles);
+                    // Clear the input value after successful loading to allow loading another scene
+                    e.target.value = '';
+                } catch (error) {
+                    alert('Error parsing JSON file: ' + error.message);
+                    // Clear the input value even on error to allow retry
+                    e.target.value = '';
+                }
+            };
+            jsonReader.readAsText(jsonFile);
+        });
+
+        // Function to load a scene from JSON data and image files
+        function loadScene(sceneData, imageFiles) {
+            // Create a map of image files by their base name (without extension)
+            const imageMap = {};
+            imageFiles.forEach(file => {
+                const baseName = file.name.split('.')[0];
+                imageMap[baseName] = file;
+            });
+
+            // Load tiling sprite if exists
+            if (sceneData.tilingSprite) {
+                const tilingImageFile = imageFiles.find(file =>
+                    file.name.split('.')[0] === sceneData.tilingSprite.type
+                );
+
+                if (tilingImageFile) {
+                    loadTilingSprite(tilingImageFile, sceneData.tilingSprite);
+                } else {
+                    console.warn(`Tiling sprite image file not found for type: ${sceneData.tilingSprite.type}`);
+                }
+            }
+
+            // Load items
+            if (sceneData.items) {
+                sceneData.items.forEach(itemData => {
+                    const imageFile = imageMap[itemData.type];
+                    if (imageFile) {
+                        loadItem(itemData, imageFile);
+                    } else {
+                        console.warn(`Image file not found for item type: ${itemData.type}`);
+                    }
+                });
+            }
+        }
+
+        // Function to load a tiling sprite
+        function loadTilingSprite(imageFile, tilingData) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    console.log('img.naturalWidth', img);
+
+                    // Create a div with the tiled background using the image URL directly
+                    const tilingDiv = document.createElement('div');
+                    tilingDiv.style.position = 'absolute';
+                    tilingDiv.style.left = '0px';
+                    tilingDiv.style.top = '0px';
+                    tilingDiv.style.width = '100%';
+                    tilingDiv.style.height = '100%';
+                    tilingDiv.style.backgroundImage = `url(${event.target.result})`;
+                    tilingDiv.style.backgroundRepeat = 'repeat';
+                    tilingDiv.style.backgroundSize = `${img.naturalWidth}px`;
+                    tilingDiv.style.pointerEvents = 'none';
+                    tilingDiv.style.zIndex = '1';
+
+                    editor.appendChild(tilingDiv);
+
+                    tilingSprite = {
+                        id: tilingData.id,
+                        type: tilingData.type,
+                        el: tilingDiv,
+                        width: tilingData.width,
+                        height: tilingData.height,
+                        originalSrc: event.target.result
+                    };
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(imageFile);
+        }
+
+        // Function to load an individual item
+        function loadItem(itemData, imageFile) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = document.createElement('img');
+                img.src = event.target.result;
+                img.className = 'item';
+
+                // Position the item based on the exported data
+                // The exported data contains center X and bottom Y coordinates
+                img.onload = () => {
+                    const imgWidth = img.naturalWidth;
+                    const imgHeight = img.naturalHeight;
+
+                    // Calculate left and top positions from center X and bottom Y
+                    const leftPos = itemData.x - (imgWidth / 2);
+                    const topPos = itemData.y - imgHeight;
+
+                    img.style.left = leftPos + 'px';
+                    img.style.top = topPos + 'px';
+
+                    editor.appendChild(img);
+
+                    // Update type counter to match the loaded item's ID
+                    if (!typeCounters[itemData.type]) {
+                        typeCounters[itemData.type] = 0;
+                    }
+                    typeCounters[itemData.type] = Math.max(typeCounters[itemData.type], itemData.id);
+
+                    const item = {
+                        id: itemData.id,
+                        type: itemData.type,
+                        x: leftPos,
+                        y: topPos,
+                        el: img
+                    };
+                    items.push(item);
+
+                    makeDraggable(img, item);
+
+                    // Update z-indexes after loading
+                    updateAllZIndexes();
+                };
+            };
+            reader.readAsDataURL(imageFile);
+        }
+
+        function makeDraggable(el, item) {
+            let offsetX, offsetY, dragging = false;
+
+            // Prevent default drag behavior on the image
+            el.addEventListener('dragstart', (e) => e.preventDefault());
+            el.addEventListener('contextmenu', (e) => e.preventDefault());
+
+            // Add hover event listeners for guide lines
+            el.addEventListener('mouseenter', () => {
+                if (!dragging) {
+                    console.log('Showing guide lines for item:', item.id, item.type);
+                    hoveredItem = item; // Track hovered item for deletion
+                    showGuideLines(item);
+                }
+            });
+
+            el.addEventListener('mouseleave', () => {
+                if (!dragging) {
+                    console.log('Hiding guide lines for item:', item.id, item.type);
+                    hoveredItem = null; // Clear hovered item
+                    hideGuideLines(item);
+                }
+            });
+
+            el.addEventListener('mousedown', (e) => {
+                e.preventDefault(); // Prevent default behavior
+                dragging = true;
+                const isDuplicating = e.altKey; // Check if Alt key is held
+                offsetX = e.offsetX;
+                offsetY = e.offsetY;
+
+                let currentEl = el;
+                let currentItem = item;
+
+                if (isDuplicating) {
+                    // Create a duplicate
+                    const newImg = el.cloneNode(true);
+                    newImg.style.left = el.style.left;
+                    newImg.style.top = el.style.top;
+                    newImg.style.opacity = '0.8';
+                    editor.appendChild(newImg);
+
+                    // Create new item data with proper type-based id
+                    typeCounters[item.type]++;
+                    const newId = typeCounters[item.type];
+                    const duplicatedItem = { id: newId, type: item.type, x: item.x, y: item.y, el: newImg };
+                    items.push(duplicatedItem);
+
+                    // Make the duplicate draggable
+                    makeDraggable(newImg, duplicatedItem);
+
+                    // We'll be dragging the duplicate, not the original
+                    currentEl = newImg;
+                    currentItem = duplicatedItem;
+
+                    // Update z-indexes after duplication
+                    updateAllZIndexes();
+                } else {
+                    // Add visual feedback for normal drag
+                    el.style.opacity = '0.8';
+                }
+
+                // Handle mouse move for this specific drag operation
+                const handleMouseMove = (e) => {
+                    if (!dragging) return;
+                    e.preventDefault();
+
+                    const rect = editor.getBoundingClientRect();
+                    let x = e.clientX - rect.left - offsetX;
+                    let y = e.clientY - rect.top - offsetY;
+                    currentEl.style.left = x + 'px';
+                    currentEl.style.top = y + 'px';
+                    currentItem.x = x;
+                    currentItem.y = y;
+
+                    // Update guide lines position during drag
+                    const leftLine = document.getElementById(`guide-left-${currentItem.id}-${currentItem.type}`);
+                    const rightLine = document.getElementById(`guide-right-${currentItem.id}-${currentItem.type}`);
+                    if (leftLine && rightLine && (leftLine.style.display === 'block' || rightLine.style.display === 'block')) {
+                        positionGuideLines(currentItem, { left: leftLine, right: rightLine });
+                    }
+
+                    // Update z-indexes during drag to maintain proper layering
+                    updateAllZIndexes();
+                };
+
+                // Handle mouse up for this specific drag operation
+                const handleMouseUp = (e) => {
+                    if (dragging) {
+                        e.preventDefault();
+                        dragging = false;
+
+                        // Reset visual feedback
+                        currentEl.style.opacity = '1';
+
+                        // Final z-index update after drag completes
+                        updateAllZIndexes();
+
+                        // Remove event listeners
+                        document.removeEventListener('mousemove', handleMouseMove);
+                        document.removeEventListener('mouseup', handleMouseUp);
+                    }
+                };
+
+                // Add event listeners for this drag operation
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+            });
+        }
+
+        exportBtn.addEventListener('click', () => {
+            console.log('Export started. Items count:', items.length);
+            console.log('Tiling sprite exists:', !!tilingSprite);
+
+            const editorRect = editor.getBoundingClientRect();
+            const itemsData = items.map(i => {
+                const rect = i.el.getBoundingClientRect();
+                const w = rect.width;
+                const h = rect.height;
+                // Calculate coordinates relative to the editor, not the viewport
+                const centerX = (rect.left - editorRect.left) + w / 2;
+                const bottomY = rect.bottom - editorRect.top;
+                return { id: i.id, type: i.type, x: centerX, y: bottomY };
+            });
+
+            console.log('Exported items data:', itemsData);
+
+            const exportData = {
+                items: itemsData,
+                tilingSprite: tilingSprite ? {
+                    id: tilingSprite.id,
+                    type: tilingSprite.type,
+                    width: tilingSprite.width,
+                    height: tilingSprite.height
+                } : null
+            };
+
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            window.open(URL.createObjectURL(blob), '_blank');
+
+
+
+
+            setTimeout(() => {
+
+
+                URL.revokeObjectURL(a.href);
+            }, 100);
+
+            console.log('Export completed successfully');
+        });
+    </script>
+
+</body>
+</html>
