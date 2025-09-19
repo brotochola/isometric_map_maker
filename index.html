@@ -334,7 +334,7 @@
             } else if (e.key === 'Delete' && hoveredItem) {
                 e.preventDefault();
                 deleteItem(hoveredItem);
-            } else if (e.key === 't' || e.key === 'T') {
+            } else if (e.key.toLowerCase() === 't' || e.key.toLowerCase() === 'r') {
                 if (hoveredItem) {
                     e.preventDefault();
                     flipItem(hoveredItem);
