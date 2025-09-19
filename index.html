@@ -21,8 +21,8 @@
         #editor {
             position: relative;
             width: 1000vw;
-            height: calc(1000vh - 400px);
-            /* subtract toolbar height, scaled for 10x size */
+            height: 1000vh;
+
             overflow: hidden;
             background: #f0f0f0;
             border-top: 1px solid #aaa;
@@ -279,7 +279,7 @@
                     typeCounters[type]++;
                     const id = typeCounters[type];
 
-                    const item = { id, type, x: 0, y: 0, el: img };
+                    const item = { id, type, x: 0, y: 0, el: img, flipped: false };
                     items.push(item);
 
                     makeDraggable(img, item);
@@ -308,7 +308,24 @@
             editor.style.transform = `translate(${editorOffsetX}px, ${editorOffsetY}px)`;
         }
 
-        // Keyboard event listeners for spacebar and delete
+        // Function to flip an item horizontally
+        function flipItem(item) {
+            console.log('Flipping item:', item.id, item.type);
+
+            // Toggle flipped state
+            item.flipped = !item.flipped;
+
+            // Apply CSS transform
+            if (item.flipped) {
+                item.el.style.transform = 'scaleX(-1)';
+            } else {
+                item.el.style.transform = 'scaleX(1)';
+            }
+
+            console.log('Item flipped state:', item.flipped);
+        }
+
+        // Keyboard event listeners for spacebar, delete, and flip
         document.addEventListener('keydown', (e) => {
             if (e.key === ' ' && !isSpacePressed) {
                 e.preventDefault();
@@ -317,6 +334,11 @@
             } else if (e.key === 'Delete' && hoveredItem) {
                 e.preventDefault();
                 deleteItem(hoveredItem);
+            } else if (e.key === 't' || e.key === 'T') {
+                if (hoveredItem) {
+                    e.preventDefault();
+                    flipItem(hoveredItem);
+                }
             }
         });
 
@@ -524,8 +546,17 @@
                         type: itemData.type,
                         x: leftPos,
                         y: topPos,
-                        el: img
+                        el: img,
+                        flipped: itemData.scaleX === -1
                     };
+
+                    // Apply flip transform if item was flipped
+                    if (item.flipped) {
+                        img.style.transform = 'scaleX(-1)';
+                    } else {
+                        img.style.transform = 'scaleX(1)';
+                    }
+
                     items.push(item);
 
                     makeDraggable(img, item);
@@ -579,10 +610,18 @@
                     newImg.style.opacity = '0.8';
                     editor.appendChild(newImg);
 
-                    // Create new item data with proper type-based id
+                    // Create new item data with proper type-based id and preserve flip state
                     typeCounters[item.type]++;
                     const newId = typeCounters[item.type];
-                    const duplicatedItem = { id: newId, type: item.type, x: item.x, y: item.y, el: newImg };
+                    const duplicatedItem = { id: newId, type: item.type, x: item.x, y: item.y, el: newImg, flipped: item.flipped };
+
+                    // Apply flip transform if original was flipped
+                    if (item.flipped) {
+                        newImg.style.transform = 'scaleX(-1)';
+                    } else {
+                        newImg.style.transform = 'scaleX(1)';
+                    }
+
                     items.push(duplicatedItem);
 
                     // Make the duplicate draggable
@@ -659,7 +698,14 @@
                 // Calculate coordinates relative to the editor, not the viewport
                 const centerX = (rect.left - editorRect.left) + w / 2;
                 const bottomY = rect.bottom - editorRect.top;
-                return { id: i.id, type: i.type, x: centerX, y: bottomY };
+                const itemData = { id: i.id, type: i.type, x: centerX, y: bottomY };
+
+                // Include scaleX if item is flipped
+                if (i.flipped) {
+                    itemData.scaleX = -1;
+                }
+
+                return itemData;
             });
 
             console.log('Exported items data:', itemsData);
