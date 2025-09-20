@@ -23,7 +23,7 @@
             width: 1000vw;
             height: 1000vh;
 
-            overflow: hidden;
+            overflow: visible;
             background: #f0f0f0;
             border-top: 1px solid #aaa;
         }
@@ -71,13 +71,6 @@
 
         }
 
-        .guide-line.left {
-            transform: rotate(-60deg);
-        }
-
-        .guide-line.right {
-            transform: rotate(60deg);
-        }
 
         .item:hover {
             border: 1px solid rgba(0, 0, 255, 0.5);
@@ -93,6 +86,17 @@
         <button id="tilingBtn">Add Tiling Background</button>
         <button id="loadSceneBtn">Load Scene</button>
         <button id="exportBtn">Export JSON</button>
+        <label for="angleSlider">Grid Angle:</label>
+        <input type="range" id="angleSlider" min="45" max="90" value="60" step="0.1">
+        <input type="number" id="angleInput" min="45" max="90" value="60" step="0.1" style="width: 60px;">
+        <span>°</span>
+        <label for="gridSizeSlider">Grid Size:</label>
+        <input type="range" id="gridSizeSlider" min="10" max="120" value="80" step="1">
+        <input type="number" id="gridSizeInput" min="10" max="120" value="80" step="1" style="width: 60px;">
+        <span>px</span>
+        <label for="gridCheckbox">
+            <input type="checkbox" id="gridCheckbox"> Show Grid
+        </label>
     </div>
 
     <div id="editor-container">
@@ -108,11 +112,19 @@
         const loadSceneInput = document.getElementById('loadSceneInput');
         const loadSceneBtn = document.getElementById('loadSceneBtn');
         const exportBtn = document.getElementById('exportBtn');
+        const angleSlider = document.getElementById('angleSlider');
+        const angleInput = document.getElementById('angleInput');
+        const gridSizeSlider = document.getElementById('gridSizeSlider');
+        const gridSizeInput = document.getElementById('gridSizeInput');
+        const gridCheckbox = document.getElementById('gridCheckbox');
 
         let items = []; // {id, type, x, y, el}
         let tilingSprite = null; // {id, el, width, height}
         let typeCounters = {}; // Track count of each type
         let hoveredItem = null; // Track currently hovered item for deletion
+        let guideLineAngle = 60; // Current guide line angle in degrees
+        let gridSize = 80; // Current grid size in pixels
+        let gridElement = null; // Grid overlay element
 
         // Panning variables
         let isPanning = false;
@@ -121,6 +133,12 @@
         let panStartY = 0;
         let editorOffsetX = 0;
         let editorOffsetY = 0;
+
+        // Zoom variables
+        let zoomLevel = 1;
+        const minZoom = 0.1;
+        const maxZoom = 3;
+        const zoomStep = 0.1;
 
         // Function to update z-index for all items based on their bottom position
         function updateAllZIndexes() {
@@ -136,14 +154,16 @@
         function createGuideLines(item) {
             // Create left guide line
             const leftLine = document.createElement('div');
-            leftLine.className = 'guide-line left';
+            leftLine.className = 'guide-line';
             leftLine.id = `guide-left-${item.id}-${item.type}`;
+            leftLine.style.transform = `rotate(${-guideLineAngle}deg)`;
             editor.appendChild(leftLine);
 
             // Create right guide line
             const rightLine = document.createElement('div');
-            rightLine.className = 'guide-line right';
+            rightLine.className = 'guide-line';
             rightLine.id = `guide-right-${item.id}-${item.type}`;
+            rightLine.style.transform = `rotate(${guideLineAngle}deg)`;
             editor.appendChild(rightLine);
 
             return { left: leftLine, right: rightLine };
@@ -151,18 +171,22 @@
 
         // Function to position guide lines at the center bottom of an item
         function positionGuideLines(item, guideLines) {
-            const rect = item.el.getBoundingClientRect();
-            const editorRect = editor.getBoundingClientRect();
+            // Get item position and dimensions in editor coordinates
+            const itemX = parseFloat(item.el.style.left) || 0;
+            const itemY = parseFloat(item.el.style.top) || 0;
+            const itemWidth = item.el.offsetWidth;
+            const itemHeight = item.el.offsetHeight;
 
-            // Calculate center bottom position relative to editor
-            const centerX = (rect.left - editorRect.left) + rect.width / 2;
-            const bottomY = rect.bottom - editorRect.top;
+            // Calculate center bottom position in editor coordinates
+            const centerX = itemX + itemWidth / 2;
+            const bottomY = itemY + itemHeight;
 
-            // Calculate line height (extend lines in both directions for full visibility)
-            const lineHeight = Math.max(editorRect.height, editorRect.width) * 2;
+            // Calculate line height (guide lines are in editor coordinate system)
+            // Make lines long enough to be visible across the entire editor area
+            const lineHeight = Math.max(2000, window.innerWidth + window.innerHeight);
 
             // Position both lines at the center bottom of the item
-            // The lines will extend both upwards and downwards from the intersection point
+            // Guide lines inherit the editor's transform, so use editor coordinates directly
             [guideLines.left, guideLines.right].forEach(line => {
                 line.style.left = (centerX - 1) + 'px'; // -1 to center the 2px wide line
                 line.style.top = (bottomY - lineHeight / 2) + 'px'; // Center the line at the intersection point
@@ -253,19 +277,26 @@
                 tilingSprite = null;
             }
 
+            // Remove grid if exists
+            if (gridElement) {
+                gridElement.remove();
+                gridElement = null;
+                gridCheckbox.checked = false;
+            }
+
             // Reset type counters
             typeCounters = {};
         }
 
         fileInput.addEventListener('change', (e) => {
+
             for (const file of e.target.files) {
                 const reader = new FileReader();
                 reader.onload = (event) => {
                     const img = document.createElement('img');
                     img.src = event.target.result;
                     img.className = 'item';
-                    img.style.left = '0px';
-                    img.style.top = '0px';
+
                     editor.appendChild(img);
 
                     const type = file.name.split('.')[0];
@@ -279,7 +310,13 @@
                     typeCounters[type]++;
                     const id = typeCounters[type];
 
-                    const item = { id, type, x: 0, y: 0, el: img, flipped: false };
+                    const x = (-editorOffsetX + (window.innerWidth / 2) - img.naturalWidth / 2) / zoomLevel;
+                    const y = (-editorOffsetY + (window.innerHeight / 2) - img.naturalHeight) / zoomLevel;
+                    const item = { id, type, x, y, el: img, flipped: false };
+
+                    img.style.left = x + 'px';
+                    img.style.top = y + 'px';
+
                     items.push(item);
 
                     makeDraggable(img, item);
@@ -303,9 +340,41 @@
             loadSceneInput.click();
         });
 
-        // Panning functionality
+        // Panning and zoom functionality
         function updateEditorPosition() {
-            editor.style.transform = `translate(${editorOffsetX}px, ${editorOffsetY}px)`;
+            editor.style.transformOrigin = '0 0';
+
+            // Limit left and top edges
+            if (editorOffsetX > 0) {
+                editorOffsetX = 0;
+            }
+            if (editorOffsetY > 0) {
+                editorOffsetY = 0;
+            }
+
+            // Calculate editor and viewport dimensions
+            const editorWidth = 10 * window.innerWidth; // 1000vw
+            const editorHeight = 10 * window.innerHeight; // 1000vh
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight - 40; // minus toolbar height
+
+            // Calculate scaled editor dimensions
+            const scaledEditorWidth = editorWidth * zoomLevel;
+            const scaledEditorHeight = editorHeight * zoomLevel;
+
+            // Limit right and bottom edges
+            const minOffsetX = -(scaledEditorWidth - viewportWidth);
+            const minOffsetY = -(scaledEditorHeight - viewportHeight);
+
+            if (editorOffsetX < minOffsetX) {
+                editorOffsetX = minOffsetX;
+            }
+            if (editorOffsetY < minOffsetY) {
+                editorOffsetY = minOffsetY;
+            }
+
+            editor.style.transform = `translate(${editorOffsetX}px, ${editorOffsetY}px) scale(${zoomLevel})`;
+
         }
 
         // Function to flip an item horizontally
@@ -370,6 +439,9 @@
                 editorOffsetX += deltaX;
                 editorOffsetY += deltaY;
 
+
+
+
                 updateEditorPosition();
 
                 panStartX = e.clientX;
@@ -382,6 +454,41 @@
                 e.preventDefault();
                 isPanning = false;
             }
+        });
+
+        // Zoom functionality with mouse wheel
+        function handleZoom(e, mouseX, mouseY) {
+            e.preventDefault();
+
+            const zoomDelta = e.deltaY > 0 ? -zoomStep : zoomStep;
+            const oldZoom = zoomLevel;
+            const newZoom = Math.max(minZoom, Math.min(maxZoom, zoomLevel + zoomDelta));
+
+            if (newZoom === oldZoom) return; // No change needed
+
+            // Get mouse position relative to editor container
+            const containerRect = editorContainer.getBoundingClientRect();
+            const mouseX_rel = mouseX - containerRect.left;
+            const mouseY_rel = mouseY - containerRect.top;
+
+            // The key insight: find what point in the original editor coordinate system is under the mouse
+            // Then ensure that same point stays under the mouse after zoom
+            const worldX = (mouseX_rel - editorOffsetX) / oldZoom;
+            const worldY = (mouseY_rel - editorOffsetY) / oldZoom;
+
+            // Update zoom
+            zoomLevel = newZoom;
+
+            // Adjust offset so the world point stays under the mouse
+            editorOffsetX = mouseX_rel - worldX * newZoom;
+            editorOffsetY = mouseY_rel - worldY * newZoom;
+
+            updateEditorPosition();
+        }
+
+        // Mouse wheel event listener
+        editorContainer.addEventListener('wheel', (e) => {
+            handleZoom(e, e.clientX, e.clientY);
         });
 
         tilingInput.addEventListener('change', (e) => {
@@ -448,6 +555,33 @@
                 const baseName = file.name.split('.')[0];
                 imageMap[baseName] = file;
             });
+
+            // Load grid settings if they exist in the scene data
+            if (sceneData.gridAngle !== undefined) {
+                updateAngle(sceneData.gridAngle);
+            }
+            if (sceneData.gridSize !== undefined) {
+                updateGridSize(sceneData.gridSize);
+            }
+            if (sceneData.gridVisible !== undefined) {
+                gridCheckbox.checked = sceneData.gridVisible;
+                toggleGrid(); // Apply the grid visibility state
+            }
+
+            // Load camera/view state if it exists in the scene data
+            if (sceneData.camera) {
+                if (sceneData.camera.zoomLevel !== undefined) {
+                    zoomLevel = sceneData.camera.zoomLevel;
+                }
+                if (sceneData.camera.offsetX !== undefined) {
+                    editorOffsetX = sceneData.camera.offsetX;
+                }
+                if (sceneData.camera.offsetY !== undefined) {
+                    editorOffsetY = sceneData.camera.offsetY;
+                }
+                // Apply the loaded camera state
+                updateEditorPosition();
+            }
 
             // Load tiling sprite if exists
             if (sceneData.tilingSprite) {
@@ -596,8 +730,23 @@
                 e.preventDefault(); // Prevent default behavior
                 dragging = true;
                 const isDuplicating = e.altKey; // Check if Alt key is held
-                offsetX = e.offsetX;
-                offsetY = e.offsetY;
+
+                // Calculate offset using the same coordinate system as mousemove
+                const containerRect = editorContainer.getBoundingClientRect();
+                const mouseXInContainer = e.clientX - containerRect.left;
+                const mouseYInContainer = e.clientY - containerRect.top;
+
+                // Convert to editor coordinates (accounting for pan and zoom)
+                const editorMouseX = (mouseXInContainer - editorOffsetX) / zoomLevel;
+                const editorMouseY = (mouseYInContainer - editorOffsetY) / zoomLevel;
+
+                // Get current item position
+                const currentX = parseFloat(el.style.left) || 0;
+                const currentY = parseFloat(el.style.top) || 0;
+
+                // Calculate offset between mouse and item position
+                offsetX = editorMouseX - currentX;
+                offsetY = editorMouseY - currentY;
 
                 let currentEl = el;
                 let currentItem = item;
@@ -643,9 +792,19 @@
                     if (!dragging) return;
                     e.preventDefault();
 
-                    const rect = editor.getBoundingClientRect();
-                    let x = e.clientX - rect.left - offsetX;
-                    let y = e.clientY - rect.top - offsetY;
+                    // Convert mouse position to editor coordinate system accounting for zoom
+                    const containerRect = editorContainer.getBoundingClientRect();
+                    const mouseXInContainer = e.clientX - containerRect.left;
+                    const mouseYInContainer = e.clientY - containerRect.top;
+
+                    // Convert to editor coordinates (accounting for pan and zoom)
+                    const editorX = (mouseXInContainer - editorOffsetX) / zoomLevel;
+                    const editorY = (mouseYInContainer - editorOffsetY) / zoomLevel;
+
+                    // Apply the offset that was captured on mousedown
+                    let x = editorX - offsetX;
+                    let y = editorY - offsetY;
+
                     currentEl.style.left = x + 'px';
                     currentEl.style.top = y + 'px';
                     currentItem.x = x;
@@ -686,18 +845,232 @@
             });
         }
 
+        // Function to create the grid element
+        function createGrid() {
+            if (gridElement) {
+                gridElement.remove();
+            }
+
+            // Create SVG element for the grid
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.style.position = 'absolute';
+            svg.style.left = '0px';
+            svg.style.top = '0px';
+            svg.style.width = '100%';
+            svg.style.height = '100%';
+            svg.style.pointerEvents = 'none';
+            svg.style.zIndex = '10'; // Above tiling background (which is 1), below items
+            svg.style.display = 'none';
+
+            // Create the grid lines directly without patterns
+            const gridSpacing = gridSize; // Use configurable grid size
+            const viewportWidth = window.innerWidth * 10;
+            const viewportHeight = window.innerHeight * 10;
+            const maxDimension = Math.max(viewportWidth, viewportHeight);
+            const lineExtent = maxDimension * 1.5; // Lines extend 1.5x the viewport size
+
+            // Convert angle to radians for calculations
+            // Guide lines are vertical lines rotated by the angle
+            const leftAngleRad = (-guideLineAngle) * Math.PI / 180; // Left guide line angle
+            const rightAngleRad = guideLineAngle * Math.PI / 180; // Right guide line angle
+
+            // Calculate how many lines we need (reduced from previous implementation)
+            const numLines = Math.ceil(maxDimension / gridSpacing);
+
+            // Get the center of the viewport
+            const centerX = viewportWidth / 2;
+            const centerY = viewportHeight / 2;
+
+            const lineWidth = 1;
+            const lineColor = 'rgba(0, 0, 255, 0.35)';
+
+            // Create left-angled lines (matching left guide line)
+            for (let i = -numLines; i <= numLines; i++) {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+
+                // For a rotated vertical line, the direction vector is (sin(angle), cos(angle))
+                const dirX = Math.sin(leftAngleRad);
+                const dirY = Math.cos(leftAngleRad);
+
+                // Perpendicular direction for spacing lines apart
+                const perpX = -dirY;
+                const perpY = dirX;
+
+                // Calculate offset for this line
+                const offsetDistance = i * gridSpacing;
+                const offsetX = offsetDistance * perpX;
+                const offsetY = offsetDistance * perpY;
+
+                // Line extends from center + offset in both directions along the direction
+                const startX = centerX + offsetX - lineExtent * dirX;
+                const startY = centerY + offsetY - lineExtent * dirY;
+                const endX = centerX + offsetX + lineExtent * dirX;
+                const endY = centerY + offsetY + lineExtent * dirY;
+
+                line.setAttribute('x1', startX.toString());
+                line.setAttribute('y1', startY.toString());
+                line.setAttribute('x2', endX.toString());
+                line.setAttribute('y2', endY.toString());
+                line.setAttribute('stroke', lineColor);
+                line.setAttribute('stroke-width', lineWidth);
+
+                svg.appendChild(line);
+            }
+
+            // Create right-angled lines (matching right guide line)
+            for (let i = -numLines; i <= numLines; i++) {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+
+                // For a rotated vertical line, the direction vector is (sin(angle), cos(angle))
+                const dirX = Math.sin(rightAngleRad);
+                const dirY = Math.cos(rightAngleRad);
+
+                // Perpendicular direction for spacing lines apart
+                const perpX = -dirY;
+                const perpY = dirX;
+
+                // Calculate offset for this line
+                const offsetDistance = i * gridSpacing;
+                const offsetX = offsetDistance * perpX;
+                const offsetY = offsetDistance * perpY;
+
+                // Line extends from center + offset in both directions along the direction
+                const startX = centerX + offsetX - lineExtent * dirX;
+                const startY = centerY + offsetY - lineExtent * dirY;
+                const endX = centerX + offsetX + lineExtent * dirX;
+                const endY = centerY + offsetY + lineExtent * dirY;
+
+                line.setAttribute('x1', startX.toString());
+                line.setAttribute('y1', startY.toString());
+                line.setAttribute('x2', endX.toString());
+                line.setAttribute('y2', endY.toString());
+                line.setAttribute('stroke', lineColor);
+                line.setAttribute('stroke-width', lineWidth);
+
+                svg.appendChild(line);
+            }
+
+            editor.appendChild(svg);
+            gridElement = svg;
+        }
+
+        // Function to update grid angle
+        function updateGridAngle() {
+            // Recreate the grid with new angles
+            if (gridCheckbox.checked && gridElement) {
+                const wasVisible = gridElement.style.display !== 'none';
+                createGrid();
+                if (wasVisible) {
+                    gridElement.style.display = 'block';
+                }
+            }
+        }
+
+        // Function to toggle grid visibility
+        function toggleGrid() {
+            if (!gridElement) {
+                createGrid();
+            }
+
+            if (gridCheckbox.checked) {
+                gridElement.style.display = 'block';
+            } else {
+                gridElement.style.display = 'none';
+            }
+        }
+
+        // Function to update all existing guide lines with new angle
+        function updateAllGuideLineAngles() {
+            items.forEach(item => {
+                const leftLine = document.getElementById(`guide-left-${item.id}-${item.type}`);
+                const rightLine = document.getElementById(`guide-right-${item.id}-${item.type}`);
+
+                if (leftLine) {
+                    leftLine.style.transform = `rotate(${-guideLineAngle}deg)`;
+                }
+                if (rightLine) {
+                    rightLine.style.transform = `rotate(${guideLineAngle}deg)`;
+                }
+            });
+        }
+
+        // Function to update angle and sync both inputs
+        function updateAngle(newAngle) {
+            guideLineAngle = Number(newAngle);
+            angleSlider.value = guideLineAngle;
+            angleInput.value = guideLineAngle;
+            updateAllGuideLineAngles();
+            updateGridAngle();
+        }
+
+        // Function to update grid size and sync both inputs
+        function updateGridSize(newSize) {
+            gridSize = Number(newSize);
+            gridSizeSlider.value = gridSize;
+            gridSizeInput.value = gridSize;
+            updateGridAngle(); // Recreate grid with new size
+        }
+
+        // Angle slider event listener
+        angleSlider.addEventListener('input', (e) => {
+            updateAngle(e.target.value);
+        });
+
+        // Angle text input event listener
+        angleInput.addEventListener('input', (e) => {
+            const value = Number(e.target.value);
+            if (!isNaN(value) && value >= 45 && value <= 90) {
+                updateAngle(value);
+            }
+        });
+
+        // Handle invalid input on blur - reset to current valid value
+        angleInput.addEventListener('blur', (e) => {
+            const value = Number(e.target.value);
+            if (isNaN(value) || value < 45 || value > 90) {
+                angleInput.value = guideLineAngle;
+            }
+        });
+
+        // Grid size slider event listener
+        gridSizeSlider.addEventListener('input', (e) => {
+            updateGridSize(e.target.value);
+        });
+
+        // Grid size text input event listener
+        gridSizeInput.addEventListener('input', (e) => {
+            const value = Number(e.target.value);
+            if (!isNaN(value) && value >= 40 && value <= 120) {
+                updateGridSize(value);
+            }
+        });
+
+        // Handle invalid grid size input on blur - reset to current valid value
+        gridSizeInput.addEventListener('blur', (e) => {
+            const value = Number(e.target.value);
+            if (isNaN(value) || value < 40 || value > 120) {
+                gridSizeInput.value = gridSize;
+            }
+        });
+
+        // Grid checkbox event listener
+        gridCheckbox.addEventListener('change', toggleGrid);
+
         exportBtn.addEventListener('click', () => {
             console.log('Export started. Items count:', items.length);
             console.log('Tiling sprite exists:', !!tilingSprite);
 
-            const editorRect = editor.getBoundingClientRect();
             const itemsData = items.map(i => {
-                const rect = i.el.getBoundingClientRect();
-                const w = rect.width;
-                const h = rect.height;
-                // Calculate coordinates relative to the editor, not the viewport
-                const centerX = (rect.left - editorRect.left) + w / 2;
-                const bottomY = rect.bottom - editorRect.top;
+                // Use actual position values from editor coordinates (not affected by zoom/transform)
+                const itemX = parseFloat(i.el.style.left) || 0;
+                const itemY = parseFloat(i.el.style.top) || 0;
+                const itemWidth = i.el.offsetWidth;
+                const itemHeight = i.el.offsetHeight;
+
+                // Calculate center X and bottom Y in editor coordinates
+                const centerX = itemX + itemWidth / 2;
+                const bottomY = itemY + itemHeight;
+
                 const itemData = { id: i.id, type: i.type, x: centerX, y: bottomY };
 
                 // Include scaleX if item is flipped
@@ -717,7 +1090,16 @@
                     type: tilingSprite.type,
                     width: tilingSprite.width,
                     height: tilingSprite.height
-                } : null
+                } : null,
+                gridAngle: guideLineAngle,
+                gridSize: gridSize,
+                gridVisible: gridCheckbox.checked,
+                // Save camera/view state
+                camera: {
+                    zoomLevel: zoomLevel,
+                    offsetX: editorOffsetX,
+                    offsetY: editorOffsetY
+                }
             };
 
             const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
