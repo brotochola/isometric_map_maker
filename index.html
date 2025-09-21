@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8" />
-    <title>Mini Image Editor</title>
+    <title>Isometric Map Maker</title>
     <style>
         html,
         body {
@@ -10,12 +10,97 @@
             padding: 0;
             height: 100%;
             overflow: hidden;
-            font-family: sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
 
         #toolbar {
-            background: #ddd;
-            padding: 5px;
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            padding: 12px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            border-bottom: 3px solid #3498db;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #toolbar input[type="file"] {
+            display: none;
+        }
+
+        #toolbar button {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        #toolbar button:hover {
+            background: linear-gradient(135deg, #2980b9 0%, #21618c 100%);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            transform: translateY(-1px);
+        }
+
+        #toolbar button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        #toolbar .export-group button {
+            background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+        }
+
+        #toolbar .export-group button:hover {
+            background: linear-gradient(135deg, #229954 0%, #1e8449 100%);
+        }
+
+        #toolbar input[type="range"] {
+            width: 80px;
+            margin: 0 5px;
+        }
+
+        #toolbar input[type="number"] {
+            background: #34495e;
+            color: white;
+            border: 1px solid #556983;
+            border-radius: 4px;
+            padding: 4px 6px;
+            width: 60px;
+        }
+
+        #toolbar label {
+            color: #ecf0f1;
+            font-weight: 500;
+            font-size: 13px;
+            margin-left: 12px;
+        }
+
+        #toolbar label:first-of-type {
+            margin-left: 0;
+        }
+
+        #toolbar span {
+            color: #bdc3c7;
+            margin-right: 8px;
+        }
+
+        .toolbar-section {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 0 8px;
+            border-right: 1px solid #556983;
+        }
+
+        .toolbar-section:last-child {
+            border-right: none;
         }
 
         #editor {
@@ -55,7 +140,7 @@
             -khtml-user-drag: none;
             -moz-user-drag: none;
             -o-user-drag: none;
-            user-drag: none;
+
             pointer-events: auto;
         }
 
@@ -71,32 +156,67 @@
 
         }
 
+        .h-guide-line {
+            position: absolute;
+            height: 2px;
+            background-color: rgba(0, 0, 255, 0.5);
+            opacity: 0.8;
+            pointer-events: none;
+            z-index: 9999;
+            display: none;
+        }
+
 
         .item:hover {
             border: 1px solid rgba(0, 0, 255, 0.5);
+        }
+
+        /* When an item is pinned to background, show yellow bounding box on hover */
+        .item.background:hover {
+            border: 1px solid yellow;
         }
     </style>
 </head>
 <body>
 
     <div id="toolbar">
+        <!-- Hidden file inputs -->
         <input type="file" id="fileInput" multiple accept="image/*">
-        <input type="file" id="tilingInput" accept="image/*" style="display: none;">
-        <input type="file" id="loadSceneInput" multiple accept=".json,image/*" style="display: none;">
-        <button id="tilingBtn">Add Tiling Background</button>
-        <button id="loadSceneBtn">Load Scene</button>
-        <button id="exportBtn">Export JSON</button>
-        <label for="angleSlider">Grid Angle:</label>
-        <input type="range" id="angleSlider" min="45" max="90" value="60" step="0.1">
-        <input type="number" id="angleInput" min="45" max="90" value="60" step="0.1" style="width: 60px;">
-        <span>°</span>
-        <label for="gridSizeSlider">Grid Size:</label>
-        <input type="range" id="gridSizeSlider" min="10" max="120" value="80" step="1">
-        <input type="number" id="gridSizeInput" min="10" max="120" value="80" step="1" style="width: 60px;">
-        <span>px</span>
-        <label for="gridCheckbox">
-            <input type="checkbox" id="gridCheckbox"> Show Grid
-        </label>
+        <input type="file" id="tilingInput" accept="image/*">
+        <input type="file" id="loadSceneInput" multiple accept=".json,image/*">
+
+        <!-- File operations section -->
+        <div class="toolbar-section">
+            <button onclick="document.getElementById('fileInput').click()">📁 Add Images</button>
+            <button id="tilingBtn">🖼️ Add Background</button>
+            <button id="loadSceneBtn">📂 Load Scene</button>
+        </div>
+
+        <!-- Export section -->
+        <div class="toolbar-section export-group">
+            <button id="exportWithoutAssetsBtn">📄 Export JSON</button>
+            <button id="exportWithAssetsBtn">📦 Export JSON + Assets</button>
+        </div>
+
+        <!-- Grid controls section -->
+        <div class="toolbar-section">
+            <label for="angleSlider">Grid Angle:</label>
+            <input type="range" id="angleSlider" min="45" max="90" value="60" step="0.1">
+            <input type="number" id="angleInput" min="45" max="90" value="60" step="0.1">
+            <span>°</span>
+
+            <label for="gridSizeSlider">Grid Size:</label>
+            <input type="range" id="gridSizeSlider" min="10" max="120" value="80" step="1">
+            <input type="number" id="gridSizeInput" min="10" max="120" value="80" step="1">
+            <span>px</span>
+        </div>
+
+        <!-- Grid visibility section -->
+        <div class="toolbar-section">
+            <label for="gridCheckbox">
+                <input type="checkbox" id="gridCheckbox"> Show Grid
+            </label>
+        </div>
     </div>
 
     <div id="editor-container">
@@ -111,7 +231,8 @@
         const tilingBtn = document.getElementById('tilingBtn');
         const loadSceneInput = document.getElementById('loadSceneInput');
         const loadSceneBtn = document.getElementById('loadSceneBtn');
-        const exportBtn = document.getElementById('exportBtn');
+        const exportWithAssetsBtn = document.getElementById('exportWithAssetsBtn');
+        const exportWithoutAssetsBtn = document.getElementById('exportWithoutAssetsBtn');
         const angleSlider = document.getElementById('angleSlider');
         const angleInput = document.getElementById('angleInput');
         const gridSizeSlider = document.getElementById('gridSizeSlider');
@@ -121,10 +242,153 @@
         let items = []; // {id, type, x, y, el}
         let tilingSprite = null; // {id, el, width, height}
         let typeCounters = {}; // Track count of each type
+        // assetsPool stores a single dataURL per image type to avoid duplicating base64 strings
+        // format: { [type]: dataURL }
+        let assetsPool = {};
         let hoveredItem = null; // Track currently hovered item for deletion
         let guideLineAngle = 60; // Current guide line angle in degrees
         let gridSize = 80; // Current grid size in pixels
         let gridElement = null; // Grid overlay element
+        // Undo stack
+        let undoStack = [];
+        const UNDO_LIMIT = 20;
+        let isPerformingUndo = false; // Prevent recording actions while undoing
+
+        function pushAction(action) {
+            if (isPerformingUndo) return;
+            undoStack.push(action);
+            if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+        }
+
+        // Helper to recreate an item from saved data (used for undo delete)
+        function recreateItemFromData(data) {
+            const img = document.createElement('img');
+            // Prefer assetsPool entry for the type, fall back to embedded src if present
+            img.src = assetsPool[data.type] || data.src;
+            img.className = 'item';
+            img.style.left = data.x + 'px';
+            img.style.top = data.y + 'px';
+            if (data.flipped) img.style.transform = 'scaleX(-1)';
+            editor.appendChild(img);
+
+            if (!typeCounters[data.type]) typeCounters[data.type] = 0;
+            typeCounters[data.type] = Math.max(typeCounters[data.type], data.id);
+
+            const newItem = { id: data.id, type: data.type, x: data.x, y: data.y, el: img, flipped: !!data.flipped, background: !!data.background };
+            if (newItem.background) {
+                img.classList.add('background');
+                img.style.zIndex = '1';
+            }
+
+            items.push(newItem);
+            makeDraggable(img, newItem);
+            updateAllZIndexes();
+            updateItemHorizon(newItem);
+            return newItem;
+        }
+
+        function undo() {
+            if (undoStack.length === 0) return;
+            const action = undoStack.pop();
+            isPerformingUndo = true;
+            try {
+                if (action.type === 'add') {
+                    const idx = items.findIndex(i => i.id === action.item.id && i.type === action.item.type);
+                    if (idx !== -1) {
+                        const it = items[idx];
+                        removeGuideLines(it);
+                        it.el.remove();
+                        items.splice(idx, 1);
+                    }
+                    updateAllZIndexes();
+                } else if (action.type === 'delete') {
+                    recreateItemFromData(action.item);
+                } else if (action.type === 'move') {
+                    const it = items.find(i => i.id === action.itemId && i.type === action.itemType);
+                    if (it) {
+                        it.x = action.from.x;
+                        it.y = action.from.y;
+                        it.el.style.left = it.x + 'px';
+                        it.el.style.top = it.y + 'px';
+                        updateAllZIndexes();
+                        positionGuideLines(it, {
+                            left: document.getElementById(`guide-left-${it.id}-${it.type}`),
+                            right: document.getElementById(`guide-right-${it.id}-${it.type}`),
+                            horiz: document.getElementById(`guide-h-${it.id}-${it.type}`)
+                        });
+                    }
+                } else if (action.type === 'flip') {
+                    const it = items.find(i => i.id === action.itemId && i.type === action.itemType);
+                    if (it) {
+                        it.flipped = action.previousFlipped;
+                        it.el.style.transform = it.flipped ? 'scaleX(-1)' : 'scaleX(1)';
+                    }
+                } else if (action.type === 'background') {
+                    const it = items.find(i => i.id === action.itemId && i.type === action.itemType);
+                    if (it) {
+                        it.background = action.previousBackground;
+                        if (it.background) {
+                            it.el.classList.add('background');
+                            it.el.style.zIndex = '1';
+                        } else {
+                            it.el.classList.remove('background');
+                            updateAllZIndexes();
+                        }
+                    }
+                } else if (action.type === 'tiling-add') {
+                    if (tilingSprite) {
+                        tilingSprite.el.remove();
+                        tilingSprite = null;
+                    }
+                } else if (action.type === 'tiling-remove') {
+                    const data = action.data;
+                    // Prefer assets from action snapshot, then global pool, then embedded originalSrc
+                    const src = (action.assets && action.assets[data.type]) || assetsPool[data.type] || data.originalSrc;
+                    const tilingDiv = document.createElement('div');
+                    tilingDiv.style.position = 'absolute';
+                    tilingDiv.style.left = '0px';
+                    tilingDiv.style.top = '0px';
+                    tilingDiv.style.width = '100%';
+                    tilingDiv.style.height = '100%';
+                    tilingDiv.style.backgroundImage = `url(${src})`;
+                    tilingDiv.style.backgroundRepeat = 'repeat';
+                    if (data.width) tilingDiv.style.backgroundSize = `${data.width}px`;
+                    tilingDiv.style.pointerEvents = 'none';
+                    tilingDiv.style.zIndex = '1';
+                    editor.appendChild(tilingDiv);
+                    tilingSprite = { id: data.id, type: data.type, el: tilingDiv, width: data.width, height: data.height, originalSrc: src };
+                } else if (action.type === 'clear-scene') {
+                    // Restore assets snapshot if present so recreated items can reference them
+                    if (action.assets && typeof action.assets === 'object') {
+                        assetsPool = Object.assign({}, action.assets);
+                    }
+                    // recreate items
+                    if (action.items && Array.isArray(action.items)) {
+                        action.items.forEach(d => recreateItemFromData(d));
+                    }
+                    // recreate tiling if present
+                    if (action.tiling) {
+                        const data = action.tiling;
+                        const src = (action.assets && action.assets[data.type]) || assetsPool[data.type] || data.originalSrc;
+                        const tilingDiv = document.createElement('div');
+                        tilingDiv.style.position = 'absolute';
+                        tilingDiv.style.left = '0px';
+                        tilingDiv.style.top = '0px';
+                        tilingDiv.style.width = '100%';
+                        tilingDiv.style.height = '100%';
+                        tilingDiv.style.backgroundImage = `url(${src})`;
+                        tilingDiv.style.backgroundRepeat = 'repeat';
+                        if (data.width) tilingDiv.style.backgroundSize = `${data.width}px`;
+                        tilingDiv.style.pointerEvents = 'none';
+                        tilingDiv.style.zIndex = '1';
+                        editor.appendChild(tilingDiv);
+                        tilingSprite = { id: data.id, type: data.type, el: tilingDiv, width: data.width, height: data.height, originalSrc: src };
+                    }
+                }
+            } finally {
+                isPerformingUndo = false;
+            }
+        }
 
         // Panning variables
         let isPanning = false;
@@ -142,11 +406,31 @@
 
         // Function to update z-index for all items based on their bottom position
         function updateAllZIndexes() {
+            // Calculate z-index based on each item's isometric horizon Y
+            const editorRect = editor.getBoundingClientRect();
             items.forEach(item => {
-                const rect = item.el.getBoundingClientRect();
-                const editorRect = editor.getBoundingClientRect();
-                const relativeBottom = rect.bottom - editorRect.top;
-                item.el.style.zIndex = Math.floor(relativeBottom).toString();
+                const el = item.el;
+                // If item is pinned as background, keep it at z-index 1
+                if (item.background) {
+                    el.style.zIndex = '1';
+                    return;
+                }
+                // item top-left in editor coordinates (style.left/top are editor coords)
+                const itemX = parseFloat(el.style.left) || 0;
+                const itemY = parseFloat(el.style.top) || 0;
+                const itemHeight = el.offsetHeight;
+
+                // Compute horizon distance from bottom of the image (px)
+                const originFromBottom = calculateIsometricHorizon(el);
+
+                // Editor Y coordinate of the horizon
+                const horizonY = (itemY + itemHeight) - originFromBottom;
+
+                // Use horizonY relative to editor's top for stacking
+                const relativeHorizon = horizonY - editorRect.top;
+
+                // Assign zIndex based on the horizon position (floor to integer)
+                el.style.zIndex = Math.floor(relativeHorizon).toString();
             });
         }
 
@@ -166,7 +450,13 @@
             rightLine.style.transform = `rotate(${guideLineAngle}deg)`;
             editor.appendChild(rightLine);
 
-            return { left: leftLine, right: rightLine };
+            // Create horizontal guide line at the horizon y
+            const horizLine = document.createElement('div');
+            horizLine.className = 'h-guide-line';
+            horizLine.id = `guide-h-${item.id}-${item.type}`;
+            editor.appendChild(horizLine);
+
+            return { left: leftLine, right: rightLine, horiz: horizLine };
         }
 
         // Function to position guide lines at the center bottom of an item
@@ -192,11 +482,37 @@
                 line.style.top = (bottomY - lineHeight / 2) + 'px'; // Center the line at the intersection point
                 line.style.height = lineHeight + 'px';
             });
+
+            // Position horizontal guide line at the computed horizon Y (editor coords)
+            const horizLine = document.getElementById(`guide-h-${item.id}-${item.type}`);
+            if (horizLine) {
+                // compute horizon relative to the item's top-left editor position
+                // item.el.style.top is item's top in editor coords; horizon is measured from image bottom
+                const imgHeight = item.el.naturalHeight || item.el.offsetHeight;
+                const originFromBottom = calculateIsometricHorizon(item.el);
+                const horizonY = (itemY + itemHeight) - originFromBottom; // editor Y coordinate for the horizon
+
+                horizLine.style.left = '0px';
+                horizLine.style.width = '100%';
+                horizLine.style.top = (horizonY - 1) + 'px'; // -1 to center 2px height
+                horizLine.style.display = 'block';
+            }
+        }
+
+        // Function to hide guide lines from all items
+        function hideAllGuideLines() {
+            items.forEach(otherItem => {
+                hideGuideLines(otherItem);
+            });
         }
 
         // Function to show guide lines for an item
         function showGuideLines(item) {
             console.log('showGuideLines called for:', item.id, item.type);
+
+            // First, hide guide lines from all other items to ensure only one item shows guides
+            hideAllGuideLines();
+
             // Check if guide lines already exist
             let leftLine = document.getElementById(`guide-left-${item.id}-${item.type}`);
             let rightLine = document.getElementById(`guide-right-${item.id}-${item.type}`);
@@ -211,9 +527,11 @@
             }
 
             // Position and show the lines
-            positionGuideLines(item, { left: leftLine, right: rightLine });
+            const horizLine = document.getElementById(`guide-h-${item.id}-${item.type}`);
+            positionGuideLines(item, { left: leftLine, right: rightLine, horiz: horizLine });
             leftLine.style.display = 'block';
             rightLine.style.display = 'block';
+            if (horizLine) horizLine.style.display = 'block';
             console.log('Guide lines should now be visible');
         }
 
@@ -222,8 +540,10 @@
             const leftLine = document.getElementById(`guide-left-${item.id}-${item.type}`);
             const rightLine = document.getElementById(`guide-right-${item.id}-${item.type}`);
 
+            const horizLine = document.getElementById(`guide-h-${item.id}-${item.type}`);
             if (leftLine) leftLine.style.display = 'none';
             if (rightLine) rightLine.style.display = 'none';
+            if (horizLine) horizLine.style.display = 'none';
         }
 
         // Function to remove guide lines for an item (when item is deleted)
@@ -231,8 +551,10 @@
             const leftLine = document.getElementById(`guide-left-${item.id}-${item.type}`);
             const rightLine = document.getElementById(`guide-right-${item.id}-${item.type}`);
 
+            const horizLine = document.getElementById(`guide-h-${item.id}-${item.type}`);
             if (leftLine) leftLine.remove();
             if (rightLine) rightLine.remove();
+            if (horizLine) horizLine.remove();
         }
 
         // Function to delete an item
@@ -251,6 +573,17 @@
                 items.splice(index, 1);
             }
 
+            // Push delete action with item data so it can be restored
+            try {
+                // Save only type reference instead of full src when possible
+                const itemDataForUndo = { id: item.id, type: item.type, x: item.x, y: item.y, flipped: item.flipped, background: item.background };
+                // If no asset in pool for this type, include src to ensure undo works
+                if (!assetsPool[item.type]) itemDataForUndo.src = item.el.src;
+                pushAction({ type: 'delete', item: itemDataForUndo });
+            } catch (err) {
+                console.warn('Failed to push delete action', err);
+            }
+
             // Clear hovered item if it was the deleted one
             if (hoveredItem === item) {
                 hoveredItem = null;
@@ -264,6 +597,17 @@
 
         // Function to clear the current scene
         function clearScene() {
+            // Snapshot current scene for undo
+            try {
+                const itemsSnapshot = items.map(it => ({ id: it.id, type: it.type, x: it.x, y: it.y, src: it.el.src, flipped: it.flipped, background: it.background }));
+                const tilingSnapshot = tilingSprite ? { id: tilingSprite.id, type: tilingSprite.type, width: tilingSprite.width, height: tilingSprite.height, originalSrc: tilingSprite.originalSrc } : null;
+                // Snapshot assets that are currently used so undo can restore them without embedding multiple copies
+                const assetsSnapshot = Object.assign({}, assetsPool);
+                pushAction({ type: 'clear-scene', items: itemsSnapshot, tiling: tilingSnapshot, assets: assetsSnapshot });
+            } catch (err) {
+                console.warn('Failed to push clear-scene action', err);
+            }
+
             // Remove all items and their guide lines
             items.forEach(item => {
                 removeGuideLines(item);
@@ -293,13 +637,19 @@
             for (const file of e.target.files) {
                 const reader = new FileReader();
                 reader.onload = (event) => {
+                    const dataURL = event.target.result;
                     const img = document.createElement('img');
-                    img.src = event.target.result;
+                    img.src = dataURL;
                     img.className = 'item';
 
                     editor.appendChild(img);
 
                     const type = file.name.split('.')[0];
+
+                    // Register asset in pool if not present
+                    if (!assetsPool[type]) {
+                        assetsPool[type] = dataURL;
+                    }
 
                     // Initialize counter for this type if it doesn't exist
                     if (!typeCounters[type]) {
@@ -319,11 +669,16 @@
 
                     items.push(item);
 
+                    // Record add action for undo. Save only a type reference; include src only if pool missing
+                    const addData = { id: item.id, type: item.type, x: item.x, y: item.y, flipped: false, background: false };
+                    pushAction({ type: 'add', item: addData });
+
                     makeDraggable(img, item);
 
-                    // Update z-indexes after adding new item
+                    // Update z-indexes and horizon after adding new item once loaded
                     img.onload = () => {
                         updateAllZIndexes();
+                        updateItemHorizon(item);
                     };
                 };
                 reader.readAsDataURL(file);
@@ -396,6 +751,12 @@
 
         // Keyboard event listeners for spacebar, delete, and flip
         document.addEventListener('keydown', (e) => {
+            // Handle Ctrl+Z for undo
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+                e.preventDefault();
+                undo();
+                return;
+            }
             if (e.key === ' ' && !isSpacePressed) {
                 e.preventDefault();
                 isSpacePressed = true;
@@ -406,7 +767,26 @@
             } else if (e.key.toLowerCase() === 't' || e.key.toLowerCase() === 'r') {
                 if (hoveredItem) {
                     e.preventDefault();
+                    // record previous flipped state
+                    const prev = hoveredItem.flipped;
                     flipItem(hoveredItem);
+                    pushAction({ type: 'flip', itemId: hoveredItem.id, itemType: hoveredItem.type, previousFlipped: prev });
+                }
+            } else if (e.key.toLowerCase() === 'b') {
+                // Toggle background pin on hovered item
+                if (hoveredItem) {
+                    e.preventDefault();
+                    const prevBg = !!hoveredItem.background;
+                    hoveredItem.background = !hoveredItem.background;
+                    if (hoveredItem.background) {
+                        hoveredItem.el.classList.add('background');
+                        hoveredItem.el.style.zIndex = '1';
+                    } else {
+                        hoveredItem.el.classList.remove('background');
+                        // Recalculate z-indexes for this item
+                        updateAllZIndexes();
+                    }
+                    pushAction({ type: 'background', itemId: hoveredItem.id, itemType: hoveredItem.type, previousBackground: prevBg });
                 }
             }
         });
@@ -421,39 +801,81 @@
         });
 
         // Mouse event listeners for panning
-        editorContainer.addEventListener('mousedown', (e) => {
-            if (isSpacePressed) {
-                e.preventDefault();
-                isPanning = true;
-                panStartX = e.clientX;
-                panStartY = e.clientY;
+        function buildExportData(includeAssets) {
+            console.log('Export started. Items count:', items.length);
+            console.log('Tiling sprite exists:', !!tilingSprite);
+
+            const itemsData = items.map(i => {
+                const itemX = parseFloat(i.el.style.left) || 0;
+                const itemY = parseFloat(i.el.style.top) || 0;
+                const itemWidth = i.el.offsetWidth;
+                const itemHeight = i.el.offsetHeight;
+                const centerX = itemX + itemWidth / 2;
+                const bottomY = itemY + itemHeight;
+                const itemData = { id: i.id, type: i.type, x: centerX, y: bottomY };
+                if (i.flipped) {
+                    itemData.scaleX = -1;
+                }
+                if (i.background) {
+                    itemData.background = true;
+                }
+                return itemData;
+            });
+
+            console.log('Exported items data:', itemsData);
+
+            const exportData = {
+                items: itemsData,
+                tilingSprite: tilingSprite ? {
+                    id: tilingSprite.id,
+                    type: tilingSprite.type,
+                    width: tilingSprite.width,
+                    height: tilingSprite.height
+                } : null,
+                gridAngle: guideLineAngle,
+                gridSize: gridSize,
+                gridVisible: gridCheckbox.checked,
+                // Save camera/view state
+                camera: {
+                    zoomLevel: zoomLevel,
+                    offsetX: editorOffsetX,
+                    offsetY: editorOffsetY
+                }
+            };
+
+            if (includeAssets) {
+                // Export single assets pool to avoid duplicate base64 per item
+                exportData.assets = assetsPool;
             }
+
+            return exportData;
+        }
+
+        function triggerExport(exportObj, filename) {
+            const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+            }, 100);
+
+            console.log('Export completed successfully');
+        }
+
+        exportWithAssetsBtn.addEventListener('click', () => {
+            const data = buildExportData(true);
+            triggerExport(data, 'isometric_scene_with_assets.json');
         });
 
-        document.addEventListener('mousemove', (e) => {
-            if (isPanning && isSpacePressed) {
-                e.preventDefault();
-                const deltaX = e.clientX - panStartX;
-                const deltaY = e.clientY - panStartY;
-
-                editorOffsetX += deltaX;
-                editorOffsetY += deltaY;
-
-
-
-
-                updateEditorPosition();
-
-                panStartX = e.clientX;
-                panStartY = e.clientY;
-            }
-        });
-
-        document.addEventListener('mouseup', (e) => {
-            if (isPanning) {
-                e.preventDefault();
-                isPanning = false;
-            }
+        exportWithoutAssetsBtn.addEventListener('click', () => {
+            const data = buildExportData(false);
+            triggerExport(data, 'isometric_scene.json');
         });
 
         // Zoom functionality with mouse wheel
@@ -497,7 +919,10 @@
 
                 // Remove existing tiling sprite if any
                 if (tilingSprite) {
+                    // record previous tiling so it can be restored
+                    try { pushAction({ type: 'tiling-remove', data: { id: tilingSprite.id, type: tilingSprite.type, width: tilingSprite.width, height: tilingSprite.height, originalSrc: tilingSprite.originalSrc } }); } catch (err) { console.warn(err); }
                     tilingSprite.el.remove();
+                    tilingSprite = null;
                 }
 
                 // Create tiling data for the new sprite
@@ -583,27 +1008,54 @@
                 updateEditorPosition();
             }
 
-            // Load tiling sprite if exists
-            if (sceneData.tilingSprite) {
-                const tilingImageFile = imageFiles.find(file =>
-                    file.name.split('.')[0] === sceneData.tilingSprite.type
-                );
+            // If the scene includes an assets map, populate assetsPool
+            if (sceneData.assets && typeof sceneData.assets === 'object') {
+                Object.keys(sceneData.assets).forEach(k => {
+                    if (!assetsPool[k]) assetsPool[k] = sceneData.assets[k];
+                });
+            }
 
-                if (tilingImageFile) {
-                    loadTilingSprite(tilingImageFile, sceneData.tilingSprite);
+            // Load tiling sprite if exists. Prefer assetsPool, otherwise look for uploaded image file
+            if (sceneData.tilingSprite) {
+                if (assetsPool[sceneData.tilingSprite.type]) {
+                    // Create tiling from pool
+                    const tilingDiv = document.createElement('div');
+                    tilingDiv.style.position = 'absolute';
+                    tilingDiv.style.left = '0px';
+                    tilingDiv.style.top = '0px';
+                    tilingDiv.style.width = '100%';
+                    tilingDiv.style.height = '100%';
+                    tilingDiv.style.backgroundImage = `url(${assetsPool[sceneData.tilingSprite.type]})`;
+                    tilingDiv.style.backgroundRepeat = 'repeat';
+                    if (sceneData.tilingSprite.width) tilingDiv.style.backgroundSize = `${sceneData.tilingSprite.width}px`;
+                    tilingDiv.style.pointerEvents = 'none';
+                    tilingDiv.style.zIndex = '1';
+                    editor.appendChild(tilingDiv);
+                    tilingSprite = { id: sceneData.tilingSprite.id, type: sceneData.tilingSprite.type, el: tilingDiv, width: sceneData.tilingSprite.width, height: sceneData.tilingSprite.height, originalSrc: assetsPool[sceneData.tilingSprite.type] };
                 } else {
-                    console.warn(`Tiling sprite image file not found for type: ${sceneData.tilingSprite.type}`);
+                    const tilingImageFile = imageFiles.find(file => file.name.split('.')[0] === sceneData.tilingSprite.type);
+                    if (tilingImageFile) {
+                        loadTilingSprite(tilingImageFile, sceneData.tilingSprite);
+                    } else {
+                        console.warn(`Tiling sprite image file not found for type: ${sceneData.tilingSprite.type}`);
+                    }
                 }
             }
 
             // Load items
             if (sceneData.items) {
                 sceneData.items.forEach(itemData => {
+                    // Prefer assetsPool for this type; if not available, try uploaded image files
                     const imageFile = imageMap[itemData.type];
-                    if (imageFile) {
+                    if (assetsPool[itemData.type]) {
+                        // Create item using assetsPool directly
+                        loadItem(itemData, null);
+                    } else if (imageFile) {
                         loadItem(itemData, imageFile);
                     } else {
                         console.warn(`Image file not found for item type: ${itemData.type}`);
+                        // Still attempt to load if itemData contains embedded src (back-compat)
+                        loadItem(itemData, null);
                     }
                 });
             }
@@ -632,6 +1084,11 @@
 
                     editor.appendChild(tilingDiv);
 
+                    // Register asset in pool for the tiling type
+                    if (!assetsPool[tilingData.type]) {
+                        assetsPool[tilingData.type] = event.target.result;
+                    }
+
                     tilingSprite = {
                         id: tilingData.id,
                         type: tilingData.type,
@@ -640,6 +1097,8 @@
                         height: tilingData.height,
                         originalSrc: event.target.result
                     };
+                    // Record tiling add for undo
+                    try { pushAction({ type: 'tiling-add', data: { id: tilingSprite.id, type: tilingSprite.type, width: tilingSprite.width, height: tilingSprite.height, originalSrc: tilingSprite.originalSrc } }); } catch (err) { console.warn(err); }
                 };
                 img.src = event.target.result;
             };
@@ -649,57 +1108,76 @@
         // Function to load an individual item
         function loadItem(itemData, imageFile) {
             const reader = new FileReader();
-            reader.onload = (event) => {
-                const img = document.createElement('img');
-                img.src = event.target.result;
-                img.className = 'item';
-
-                // Position the item based on the exported data
-                // The exported data contains center X and bottom Y coordinates
-                img.onload = () => {
-                    const imgWidth = img.naturalWidth;
-                    const imgHeight = img.naturalHeight;
-
-                    // Calculate left and top positions from center X and bottom Y
-                    const leftPos = itemData.x - (imgWidth / 2);
-                    const topPos = itemData.y - imgHeight;
-
-                    img.style.left = leftPos + 'px';
-                    img.style.top = topPos + 'px';
-
-                    editor.appendChild(img);
-
-                    // Update type counter to match the loaded item's ID
-                    if (!typeCounters[itemData.type]) {
-                        typeCounters[itemData.type] = 0;
-                    }
-                    typeCounters[itemData.type] = Math.max(typeCounters[itemData.type], itemData.id);
-
-                    const item = {
-                        id: itemData.id,
-                        type: itemData.type,
-                        x: leftPos,
-                        y: topPos,
-                        el: img,
-                        flipped: itemData.scaleX === -1
-                    };
-
-                    // Apply flip transform if item was flipped
-                    if (item.flipped) {
-                        img.style.transform = 'scaleX(-1)';
-                    } else {
-                        img.style.transform = 'scaleX(1)';
-                    }
-
-                    items.push(item);
-
-                    makeDraggable(img, item);
-
-                    // Update z-indexes after loading
-                    updateAllZIndexes();
+            // If an imageFile is provided, read it; otherwise use assetsPool or embedded src
+            if (imageFile) {
+                reader.onload = (event) => {
+                    createItemFromSrc(itemData, event.target.result);
                 };
+                reader.readAsDataURL(imageFile);
+            } else {
+                // Use pool or embedded src
+                const src = assetsPool[itemData.type] || itemData.src || '';
+                createItemFromSrc(itemData, src);
+            }
+        }
+
+        // Helper to create an item element given preloaded src
+        function createItemFromSrc(itemData, src) {
+            const img = document.createElement('img');
+            img.src = src;
+            img.className = 'item';
+
+            img.onload = () => {
+                const imgWidth = img.naturalWidth;
+                const imgHeight = img.naturalHeight;
+
+                // Calculate left and top positions from center X and bottom Y
+                const leftPos = itemData.x - (imgWidth / 2);
+                const topPos = itemData.y - imgHeight;
+
+                img.style.left = leftPos + 'px';
+                img.style.top = topPos + 'px';
+
+                editor.appendChild(img);
+
+                // Update type counter to match the loaded item's ID
+                if (!typeCounters[itemData.type]) {
+                    typeCounters[itemData.type] = 0;
+                }
+                typeCounters[itemData.type] = Math.max(typeCounters[itemData.type], itemData.id);
+
+                const item = {
+                    id: itemData.id,
+                    type: itemData.type,
+                    x: leftPos,
+                    y: topPos,
+                    el: img,
+                    flipped: itemData.scaleX === -1,
+                    background: !!itemData.background
+                };
+
+                // Apply flip transform if item was flipped
+                if (item.flipped) {
+                    img.style.transform = 'scaleX(-1)';
+                } else {
+                    img.style.transform = 'scaleX(1)';
+                }
+
+                // Apply background class and z-index if item is marked as background
+                if (item.background) {
+                    img.classList.add('background');
+                    img.style.zIndex = '1';
+                }
+
+                items.push(item);
+
+                makeDraggable(img, item);
+
+                // Update z-indexes after loading
+                updateAllZIndexes();
+                // Set item horizon pivot based on current grid angle
+                updateItemHorizon(item);
             };
-            reader.readAsDataURL(imageFile);
         }
 
         function makeDraggable(el, item) {
@@ -751,18 +1229,27 @@
                 let currentEl = el;
                 let currentItem = item;
 
+                // store drag start position to later create move action
+                if (currentItem) {
+                    currentItem._dragFrom = { x: currentItem.x, y: currentItem.y };
+                }
+
                 if (isDuplicating) {
                     // Create a duplicate
                     const newImg = el.cloneNode(true);
                     newImg.style.left = el.style.left;
                     newImg.style.top = el.style.top;
                     newImg.style.opacity = '0.8';
+                    // Ensure duplicates do not inherit the background/pinned state visually
+                    newImg.classList.remove('background');
+                    newImg.style.zIndex = '';
                     editor.appendChild(newImg);
 
                     // Create new item data with proper type-based id and preserve flip state
                     typeCounters[item.type]++;
                     const newId = typeCounters[item.type];
-                    const duplicatedItem = { id: newId, type: item.type, x: item.x, y: item.y, el: newImg, flipped: item.flipped };
+                    // Do not copy the `background` flag to the duplicate (duplicates should be regular items)
+                    const duplicatedItem = { id: newId, type: item.type, x: item.x, y: item.y, el: newImg, flipped: item.flipped, background: false };
 
                     // Apply flip transform if original was flipped
                     if (item.flipped) {
@@ -773,8 +1260,22 @@
 
                     items.push(duplicatedItem);
 
+                    // Record duplication as an add action for undo
+                    try {
+                        const addItem = { id: duplicatedItem.id, type: duplicatedItem.type, x: duplicatedItem.x, y: duplicatedItem.y, flipped: duplicatedItem.flipped, background: false };
+                        if (!assetsPool[duplicatedItem.type]) addItem.src = newImg.src;
+                        pushAction({ type: 'add', item: addItem });
+                    } catch (err) {
+                        console.warn('Failed to push duplication action', err);
+                    }
+
                     // Make the duplicate draggable
+                    // Preserve transform-origin for the duplicate so pivot stays consistent
+                    newImg.style.transformOrigin = el.style.transformOrigin || '';
                     makeDraggable(newImg, duplicatedItem);
+
+                    // Ensure horizon pivot is correct after duplication
+                    updateItemHorizon(duplicatedItem);
 
                     // We'll be dragging the duplicate, not the original
                     currentEl = newImg;
@@ -832,6 +1333,21 @@
 
                         // Final z-index update after drag completes
                         updateAllZIndexes();
+
+                        // If the item moved, push a move action with from/to
+                        if (currentItem) {
+                            const idKey = currentItem.id;
+                            const typeKey = currentItem.type;
+                            // We don't have previous position saved here; capture from event if stored on item
+                            if (currentItem._dragFrom) {
+                                const from = { x: currentItem._dragFrom.x, y: currentItem._dragFrom.y };
+                                const to = { x: currentItem.x, y: currentItem.y };
+                                if (from.x !== to.x || from.y !== to.y) {
+                                    pushAction({ type: 'move', itemId: idKey, itemType: typeKey, from, to });
+                                }
+                                delete currentItem._dragFrom;
+                            }
+                        }
 
                         // Remove event listeners
                         document.removeEventListener('mousemove', handleMouseMove);
@@ -994,6 +1510,52 @@
             });
         }
 
+        // Calculate isometric horizon (vertical distance from image bottom in px)
+        // Based on image half-width and the current grid angle. If the
+        // intersection point (where the angled guide line meets the top of
+        // the image) lies outside the image bounds, the value is clamped.
+        function calculateIsometricHorizon(img) {
+            const W = img.naturalWidth || img.width || 0;
+            const H = img.naturalHeight || img.height || 0;
+            if (W === 0 || H === 0) return 0;
+
+            const halfW = W / 2;
+            const theta = guideLineAngle * Math.PI / 180; // angle in radians measured from vertical
+            const tanTheta = Math.tan(theta);
+
+            // Vertical rise from bottom to the intersection point where the
+            // angled guide (starting at bottom center) reaches the image edge:
+            // y = halfWidth / tan(theta)
+            let y = halfW / tanTheta;
+
+            // Clamp to image height
+            if (!isFinite(y)) y = 0;
+            if (y < 0) y = 0;
+            if (y > H) y = H;
+
+            return y; // px from bottom
+        }
+
+        // Update transform-origin for a single item element so its pivot is
+        // placed at the isometric horizon (center horizontally, computed Y)
+        function updateItemHorizon(item) {
+            if (!item || !item.el) return;
+            const img = item.el;
+            // Only update when image has loaded its dimensions
+            if (!img.complete || (img.naturalWidth === 0 && img.naturalHeight === 0)) return;
+
+            const H = img.naturalHeight;
+            const originFromBottom = calculateIsometricHorizon(img);
+            const originY = Math.max(0, H - originFromBottom); // px from top
+            const originX = (img.naturalWidth || img.width) / 2;
+
+            img.style.transformOrigin = `${originX}px ${originY}px`;
+        }
+
+        function updateAllItemHorizons() {
+            items.forEach(item => updateItemHorizon(item));
+        }
+
         // Function to update angle and sync both inputs
         function updateAngle(newAngle) {
             guideLineAngle = Number(newAngle);
@@ -1001,6 +1563,8 @@
             angleInput.value = guideLineAngle;
             updateAllGuideLineAngles();
             updateGridAngle();
+            // Update item horizons because they depend on grid angle
+            updateAllItemHorizons();
         }
 
         // Function to update grid size and sync both inputs
@@ -1056,66 +1620,6 @@
         // Grid checkbox event listener
         gridCheckbox.addEventListener('change', toggleGrid);
 
-        exportBtn.addEventListener('click', () => {
-            console.log('Export started. Items count:', items.length);
-            console.log('Tiling sprite exists:', !!tilingSprite);
-
-            const itemsData = items.map(i => {
-                // Use actual position values from editor coordinates (not affected by zoom/transform)
-                const itemX = parseFloat(i.el.style.left) || 0;
-                const itemY = parseFloat(i.el.style.top) || 0;
-                const itemWidth = i.el.offsetWidth;
-                const itemHeight = i.el.offsetHeight;
-
-                // Calculate center X and bottom Y in editor coordinates
-                const centerX = itemX + itemWidth / 2;
-                const bottomY = itemY + itemHeight;
-
-                const itemData = { id: i.id, type: i.type, x: centerX, y: bottomY };
-
-                // Include scaleX if item is flipped
-                if (i.flipped) {
-                    itemData.scaleX = -1;
-                }
-
-                return itemData;
-            });
-
-            console.log('Exported items data:', itemsData);
-
-            const exportData = {
-                items: itemsData,
-                tilingSprite: tilingSprite ? {
-                    id: tilingSprite.id,
-                    type: tilingSprite.type,
-                    width: tilingSprite.width,
-                    height: tilingSprite.height
-                } : null,
-                gridAngle: guideLineAngle,
-                gridSize: gridSize,
-                gridVisible: gridCheckbox.checked,
-                // Save camera/view state
-                camera: {
-                    zoomLevel: zoomLevel,
-                    offsetX: editorOffsetX,
-                    offsetY: editorOffsetY
-                }
-            };
-
-            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-            window.open(URL.createObjectURL(blob), '_blank');
-
-
-
-
-            setTimeout(() => {
-
-
-                URL.revokeObjectURL(a.href);
-            }, 100);
-
-            console.log('Export completed successfully');
-        });
     </script>
 
 </body>
