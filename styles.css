@@ -115,12 +115,8 @@ body {
   border-top: 1px solid #aaa;
 }
 
-#editor-container.panning {
+#editor-container.panning * {
   cursor: grab;
-}
-
-#editor-container.panning:active {
-  cursor: grabbing;
 }
 
 .item {
@@ -174,5 +170,5 @@ body {
 
 /* When an item is pinned to background, show yellow bounding box on hover */
 .item.background:hover {
-  border: 1px solid yellow;
+  border: 1px solid orange;
 }

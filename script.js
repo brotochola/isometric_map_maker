@@ -246,6 +246,7 @@ function undo() {
 // Panning variables
 let isPanning = false;
 let isSpacePressed = false;
+let isMiddleMousePressed = false;
 let panStartX = 0;
 let panStartY = 0;
 let editorOffsetX = 0;
@@ -720,6 +721,110 @@ document.addEventListener("keydown", (e) => {
         previousBackground: prevBg,
       });
     }
+  } else if (
+    hoveredItem &&
+    (e.key === "ArrowUp" ||
+      e.key === "ArrowDown" ||
+      e.key === "ArrowLeft" ||
+      e.key === "ArrowRight")
+  ) {
+    // Move hovered item 1px with arrow keys
+    e.preventDefault();
+
+    // Store original position for undo
+    const fromX = hoveredItem.x;
+    const fromY = hoveredItem.y;
+
+    // Calculate new position based on arrow key
+    let newX = hoveredItem.x;
+    let newY = hoveredItem.y;
+
+    switch (e.key) {
+      case "ArrowUp":
+        newY -= 1;
+        break;
+      case "ArrowDown":
+        newY += 1;
+        break;
+      case "ArrowLeft":
+        newX -= 1;
+        break;
+      case "ArrowRight":
+        newX += 1;
+        break;
+    }
+
+    // Update item position
+    hoveredItem.x = newX;
+    hoveredItem.y = newY;
+    hoveredItem.el.style.setProperty("--item-x", newX + "px");
+    hoveredItem.el.style.setProperty("--item-y", newY + "px");
+
+    // Update guide lines if they're visible
+    const leftLine = document.getElementById(
+      `guide-left-${hoveredItem.id}-${hoveredItem.type}`
+    );
+    const rightLine = document.getElementById(
+      `guide-right-${hoveredItem.id}-${hoveredItem.type}`
+    );
+    const horizLine = document.getElementById(
+      `guide-h-${hoveredItem.id}-${hoveredItem.type}`
+    );
+
+    if (
+      leftLine &&
+      rightLine &&
+      (leftLine.style.display === "block" ||
+        rightLine.style.display === "block")
+    ) {
+      positionGuideLines(hoveredItem, {
+        left: leftLine,
+        right: rightLine,
+        horiz: horizLine,
+      });
+    }
+
+    // Update z-indexes to maintain proper layering
+    updateAllZIndexes();
+
+    // Record move action for undo
+    pushAction({
+      type: "move",
+      itemId: hoveredItem.id,
+      itemType: hoveredItem.type,
+      from: { x: fromX, y: fromY },
+      to: { x: newX, y: newY },
+    });
+  } else if (
+    e.key.toLowerCase() === "w" ||
+    e.key.toLowerCase() === "a" ||
+    e.key.toLowerCase() === "s" ||
+    e.key.toLowerCase() === "d"
+  ) {
+    // WASD camera movement (10px per keypress)
+    e.preventDefault();
+
+    switch (e.key.toLowerCase()) {
+      case "s":
+        // Move camera up (show content above)
+        editorOffsetY -= 10 / zoomLevel;
+        break;
+      case "w":
+        // Move camera down (show content below)
+        editorOffsetY += 10 / zoomLevel;
+        break;
+      case "a":
+        // Move camera left (show content on the left)
+        editorOffsetX += 10 / zoomLevel;
+        break;
+      case "d":
+        // Move camera right (show content on the right)
+        editorOffsetX -= 10 / zoomLevel;
+        break;
+    }
+
+    // Apply the camera movement
+    updateEditorPosition();
   }
 });
 
@@ -734,7 +839,15 @@ document.addEventListener("keyup", (e) => {
 
 // Mouse event listeners for panning
 editorContainer.addEventListener("mousedown", (e) => {
-  if (isSpacePressed && !isPanning) {
+  // Handle middle mouse button press
+  if (e.button === 1) {
+    e.preventDefault();
+    isMiddleMousePressed = true;
+    editorContainer.classList.add("panning");
+  }
+
+  // Handle panning with either spacebar or middle mouse button
+  if ((isSpacePressed || isMiddleMousePressed) && !isPanning) {
     e.preventDefault();
     isPanning = true;
     panStartX = e.clientX;
@@ -743,8 +856,25 @@ editorContainer.addEventListener("mousedown", (e) => {
   }
 });
 
+// Prevent context menu on middle mouse button
+editorContainer.addEventListener("contextmenu", (e) => {
+  if (isMiddleMousePressed) {
+    e.preventDefault();
+  }
+});
+
+// Reset middle mouse state when window loses focus to prevent stuck panning
+window.addEventListener("blur", () => {
+  if (isMiddleMousePressed) {
+    isMiddleMousePressed = false;
+    isPanning = false;
+    editorContainer.classList.remove("panning");
+    editorContainer.style.cursor = "";
+  }
+});
+
 document.addEventListener("mousemove", (e) => {
-  if (isPanning && isSpacePressed) {
+  if (isPanning && (isSpacePressed || isMiddleMousePressed)) {
     e.preventDefault();
     const deltaX = e.clientX - panStartX;
     const deltaY = e.clientY - panStartY;
@@ -760,6 +890,13 @@ document.addEventListener("mousemove", (e) => {
 });
 
 document.addEventListener("mouseup", (e) => {
+  // Handle middle mouse button release
+  if (e.button === 1 && isMiddleMousePressed) {
+    e.preventDefault();
+    isMiddleMousePressed = false;
+    editorContainer.classList.remove("panning");
+  }
+
   if (isPanning) {
     e.preventDefault();
     isPanning = false;
@@ -1550,6 +1687,8 @@ function makeDraggable(el, item) {
 
   el.addEventListener("mousedown", (e) => {
     e.preventDefault(); // Prevent default behavior
+    if (e.button !== 0) return;
+    if (el.classList.contains("background")) return;
     dragging = true;
     const isDuplicating = e.altKey; // Check if Alt key is held
 
@@ -1589,6 +1728,7 @@ function makeDraggable(el, item) {
         "--item-y",
         el.style.getPropertyValue("--item-y")
       );
+
       newImg.style.opacity = "0.8";
       // Ensure duplicates do not inherit the background/pinned state visually
       newImg.classList.remove("background");
@@ -1669,8 +1809,10 @@ function makeDraggable(el, item) {
       // Update z-indexes after duplication
       updateAllZIndexes();
     } else {
-      // Add visual feedback for normal drag
-      el.style.opacity = "0.8";
+      // Add visual feedback for normal drag (but not when panning)
+      if (!isSpacePressed && !isMiddleMousePressed) {
+        el.style.opacity = "0.8";
+      }
     }
 
     // Handle mouse move for this specific drag operation
