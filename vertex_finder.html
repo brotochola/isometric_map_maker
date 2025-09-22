@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Isometric Building Occlusion Tester</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .upload-section {
+            background: #f8f9fa;
+            border: 3px dashed #dee2e6;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .upload-section:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .upload-section.dragover {
+            border-color: #28a745;
+            background: #f0fff4;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .upload-btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: transform 0.3s ease;
+        }
+
+        .upload-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .settings {
+            background: #fff;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .setting-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .setting-label {
+            min-width: 150px;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        input[type="range"] {
+            flex: 1;
+            margin: 0 15px;
+        }
+
+        .setting-value {
+            min-width: 40px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+        }
+
+        .sidebar {
+            background: #fff;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            height: fit-content;
+        }
+
+        .building-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .building-item {
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 10px;
+            cursor: move;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .building-item:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+        }
+
+        .building-item.selected {
+            border-color: #28a745;
+            background: #f0fff4;
+        }
+
+        .building-item img {
+            width: 100%;
+            max-height: 80px;
+            object-fit: contain;
+            margin-bottom: 8px;
+        }
+
+        .building-info {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .canvas-container {
+            background: #fff;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+
+        .game-canvas {
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            cursor: pointer;
+            background: linear-gradient(45deg, #f8f9fa 25%, transparent 25%),
+                linear-gradient(-45deg, #f8f9fa 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #f8f9fa 75%),
+                linear-gradient(-45deg, transparent 75%, #f8f9fa 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+
+        .occlusion-info {
+            margin-top: 15px;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 8px;
+            border-left: 4px solid #2196f3;
+        }
+
+        .occlusion-item {
+            margin: 5px 0;
+            padding: 5px;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            opacity: 0.9;
+        }
+
+        .delete-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .error {
+            color: #dc3545;
+            background: #f8d7da;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .coordinates {
+            font-family: 'Courier New', monospace;
+            background: #f1f3f4;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏢 Isometric Building Occlusion Tester</h1>
+
+        <div class="controls">
+            <div class="upload-section" id="uploadSection">
+                <p style="font-size: 16px; color: #666; margin-bottom: 15px;">
+                    Drop PNG images or click to select
+                </p>
+                <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                    Add Building
+                </button>
+                <input type="file" id="fileInput" accept=".png,image/png" multiple />
+            </div>
+
+            <div class="settings">
+                <h4 style="margin-bottom: 15px; color: #333;">Analysis Settings</h4>
+                <div class="setting-row">
+                    <span class="setting-label">Alpha Threshold:</span>
+                    <input type="range" id="alphaThreshold" min="1" max="255" value="10">
+                    <span class="setting-value" id="alphaValue">10</span>
+                </div>
+                <div class="setting-row">
+                    <span class="setting-label">Edge Range:</span>
+                    <input type="range" id="edgeRange" min="5" max="50" value="20">
+                    <span class="setting-value" id="edgeValue">20</span>
+                </div>
+                <button class="btn btn-danger" onclick="app.clearAll()">Clear All</button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="sidebar">
+                <h3 style="margin-bottom: 15px; color: #333;">Buildings</h3>
+                <div class="building-list" id="buildingList"></div>
+
+                <div class="occlusion-info">
+                    <h4 style="margin-bottom: 10px; color: #333;">Occlusion Analysis</h4>
+                    <div id="occlusionResults">
+                        <p style="color: #666; font-style: italic;">Place buildings to see occlusion results</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="canvas-container">
+                <h3 style="margin-bottom: 15px; color: #333;">Game World</h3>
+                <canvas id="gameCanvas" class="game-canvas" width="800" height="600"></canvas>
+
+                <div style="margin-top: 15px; font-size: 14px; color: #666;">
+                    <strong>Instructions:</strong>
+                    Upload PNG images to analyze their isometry vertex automatically.
+                    Then drag buildings from the sidebar onto the canvas to test occlusion relationships.
+                </div>
+            </div>
+        </div>
+
+        <div id="errorDisplay" class="error hidden"></div>
+    </div>
+
+    <script>
+        class IsometricBuilding {
+            constructor(id, imageElement, vertexX, vertexY, imageWidth, imageHeight) {
+                this.id = id;
+                this.imageElement = imageElement;
+                this.vertexX = vertexX;
+                this.vertexY = vertexY;
+                this.imageWidth = imageWidth;
+                this.imageHeight = imageHeight;
+                this.x = 0;
+                this.y = 0;
+                this.zIndex = 0;
+                this.horizons = this.calculateHorizons();
+            }
+
+            calculateHorizons() {
+                // 30 degrees from horizontal (bottom edge), going up-left and up-right
+                const angleRad = 30 * Math.PI / 180;
+                const slope = Math.tan(angleRad); // Positive because we want lines going UP (decreasing Y)
+
+                // Left horizon: line goes up-left from vertex 
+                // Since Y decreases as we go up, we subtract
+                const leftHorizonY = this.vertexY - slope * this.vertexX;
+
+                // Right horizon: line goes up-right from vertex
+                const rightHorizonY = this.vertexY - slope * (this.imageWidth - this.vertexX);
+
+                return {
+                    left: { x: 0, y: leftHorizonY },
+                    right: { x: this.imageWidth, y: rightHorizonY },
+                    vertex: { x: this.vertexX, y: this.vertexY }
+                };
+            }
+
+            isPointInFront(worldPointX, worldPointY) {
+                const relativeX = worldPointX - this.x + this.vertexX;
+                const relativeY = worldPointY - this.y + this.vertexY;
+
+                if (relativeX < 0 || relativeX > this.imageWidth) {
+                    return false;
+                }
+
+                // 30 degrees from horizontal - lines go UP from vertex
+                const slope = Math.tan(30 * Math.PI / 180);
+                let boundaryY;
+
+                if (relativeX <= this.vertexX) {
+                    // Left side: line goes up-left from vertex
+                    boundaryY = this.horizons.vertex.y - slope * (this.horizons.vertex.x - relativeX);
+                } else {
+                    // Right side: line goes up-right from vertex
+                    boundaryY = this.horizons.vertex.y - slope * (relativeX - this.horizons.vertex.x);
+                }
+
+                // Point is in front if it's BELOW the boundary line (higher Y value in canvas coords)
+                return relativeY < boundaryY;
+            }
+
+            calculateZIndex() {
+                // Base z-index from position - this is just a starting point
+                return (this.y + this.vertexY) * 1000 + (this.x + this.vertexX);
+            }
+
+            // New method: Calculate contextual z-index based on overlapping relationships
+            getContextualZIndex(allBuildings) {
+                let contextualZIndex = this.calculateZIndex();
+                const overlappingBuildings = this.findOverlappingBuildingsFromSet(allBuildings);
+
+                if (overlappingBuildings.length > 0) {
+                    // Process each overlapping relationship
+                    overlappingBuildings.forEach(otherBuilding => {
+                        const adjustment = this.calculateZIndexRelationship(otherBuilding);
+                        contextualZIndex += adjustment;
+                    });
+                }
+
+                return contextualZIndex;
+            }
+
+            findOverlappingBuildingsFromSet(buildingSet) {
+                const overlapping = [];
+                const myBounds = this.getBounds();
+
+                buildingSet.forEach((otherBuilding, otherId) => {
+                    if (otherId !== this.id) {
+                        const otherBounds = otherBuilding.getBounds();
+                        if (this.boundingBoxesOverlap(myBounds, otherBounds)) {
+                            overlapping.push(otherBuilding);
+                        }
+                    }
+                });
+
+                return overlapping;
+            }
+
+            boundingBoxesOverlap(bounds1, bounds2) {
+                return !(bounds1.right < bounds2.left ||
+                    bounds2.right < bounds1.left ||
+                    bounds1.bottom < bounds2.top ||
+                    bounds2.bottom < bounds1.top);
+            }
+
+            calculateZIndexRelationship(otherBuilding) {
+                // Determine which building is larger (by area)
+                const myArea = this.imageWidth * this.imageHeight;
+                const otherArea = otherBuilding.imageWidth * otherBuilding.imageHeight;
+
+                let largerBuilding, smallerBuilding, amISmaller;
+                if (myArea >= otherArea) {
+                    largerBuilding = this;
+                    smallerBuilding = otherBuilding;
+                    amISmaller = false;
+                } else {
+                    largerBuilding = otherBuilding;
+                    smallerBuilding = this;
+                    amISmaller = true;
+                }
+
+                // Get smaller building's vertex in canvas coordinates
+                const smallerVertexCanvasX = smallerBuilding.x + smallerBuilding.vertexX;
+                const smallerVertexCanvasY = smallerBuilding.y + smallerBuilding.vertexY;
+
+                // Get larger building's vertex in canvas coordinates  
+                const largerVertexCanvasX = largerBuilding.x + largerBuilding.vertexX;
+                const largerVertexCanvasY = largerBuilding.y + largerBuilding.vertexY;
+
+                // Determine which side of larger building's vertex the smaller building is on
+                const isOnRightSide = smallerVertexCanvasX > largerVertexCanvasX;
+
+                // Get the appropriate horizon point in canvas coordinates
+                let horizonCanvasX, horizonCanvasY;
+                if (isOnRightSide) {
+                    horizonCanvasX = largerBuilding.x + largerBuilding.horizons.right.x;
+                    horizonCanvasY = largerBuilding.y + largerBuilding.horizons.right.y;
+                } else {
+                    horizonCanvasX = largerBuilding.x + largerBuilding.horizons.left.x;
+                    horizonCanvasY = largerBuilding.y + largerBuilding.horizons.left.y;
+                }
+
+                // Calculate the Y coordinate on the diagonal line from vertex to horizon point
+                // at the X coordinate of the smaller building's vertex
+                // Line equation: Y = y1 + (y2 - y1) * (X - x1) / (x2 - x1)
+                const deltaX = horizonCanvasX - largerVertexCanvasX;
+                let isBelowDiagonalLine;
+
+                if (Math.abs(deltaX) < 0.001) {
+                    // Vertical line case - compare X positions instead
+                    isBelowDiagonalLine = smallerVertexCanvasX > largerVertexCanvasX;
+                } else {
+                    const diagonalYAtSmallerX = largerVertexCanvasY +
+                        (horizonCanvasY - largerVertexCanvasY) *
+                        (smallerVertexCanvasX - largerVertexCanvasX) /
+                        deltaX;
+
+                    // Check if smaller building vertex is below the diagonal line
+                    isBelowDiagonalLine = smallerVertexCanvasY > diagonalYAtSmallerX;
+                }
+
+                // Calculate z-index adjustment - use much larger values to override positional differences
+                // The base z-index can be in the hundreds of thousands, so we need large adjustments
+                const LARGE_ADJUSTMENT = 1000000; // One million to ensure it overrides positional z-index
+
+                let adjustment = 0;
+                if (isBelowDiagonalLine) {
+                    // Below diagonal line = smaller should be in front (higher z-index)
+                    adjustment = amISmaller ? LARGE_ADJUSTMENT : -LARGE_ADJUSTMENT;
+                } else {
+                    // Above diagonal line = smaller should be behind (lower z-index)  
+                    adjustment = amISmaller ? -LARGE_ADJUSTMENT : LARGE_ADJUSTMENT;
+                }
+
+                return adjustment;
+            }
+
+            setPosition(x, y) {
+                this.x = x;
+                this.y = y;
+                // Recalculate z-index with new position
+                this.zIndex = this.calculateZIndex();
+
+                // Update z-indexes of all overlapping buildings
+                if (window.app) {
+                    window.app.buildings.forEach(building => {
+                        if (building.id !== this.id) {
+                            building.zIndex = building.calculateZIndex();
+                        }
+                    });
+                }
+            }
+
+            getBounds() {
+                return {
+                    left: this.x,
+                    right: this.x + this.imageWidth,
+                    top: this.y,
+                    bottom: this.y + this.imageHeight
+                };
+            }
+
+            containsPoint(x, y) {
+                const bounds = this.getBounds();
+                return x >= bounds.left && x <= bounds.right &&
+                    y >= bounds.top && y <= bounds.bottom;
+            }
+        }
+
+        class IsometricApp {
+            constructor() {
+                this.buildings = new Map();
+                this.nextBuildingId = 1;
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.dragging = null;
+                this.dragOffset = { x: 0, y: 0 };
+                this.selectedBuilding = null;
+
+                this.setupEventListeners();
+                this.draw();
+            }
+
+            setupEventListeners() {
+                const fileInput = document.getElementById('fileInput');
+                const uploadSection = document.getElementById('uploadSection');
+                const alphaThreshold = document.getElementById('alphaThreshold');
+                const edgeRange = document.getElementById('edgeRange');
+
+                fileInput.addEventListener('change', (e) => this.handleFiles(e.target.files));
+
+                // Drag and drop for upload
+                uploadSection.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    uploadSection.classList.add('dragover');
+                });
+
+                uploadSection.addEventListener('dragleave', () => {
+                    uploadSection.classList.remove('dragover');
+                });
+
+                uploadSection.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    uploadSection.classList.remove('dragover');
+                    if (e.dataTransfer.files.length > 0) {
+                        this.handleFiles(e.dataTransfer.files);
+                    }
+                });
+
+                // Canvas events
+                this.canvas.addEventListener('mousedown', (e) => this.onCanvasMouseDown(e));
+                this.canvas.addEventListener('mousemove', (e) => this.onCanvasMouseMove(e));
+                this.canvas.addEventListener('mouseup', (e) => this.onCanvasMouseUp(e));
+
+                // Settings updates
+                alphaThreshold.addEventListener('input', (e) => {
+                    document.getElementById('alphaValue').textContent = e.target.value;
+                });
+
+                edgeRange.addEventListener('input', (e) => {
+                    document.getElementById('edgeValue').textContent = e.target.value;
+                });
+            }
+
+            handleFiles(files) {
+                Array.from(files).forEach(file => {
+                    if (file.type.includes('png')) {
+                        this.loadBuilding(file);
+                    }
+                });
+            }
+
+            loadBuilding(file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        this.analyzeAndCreateBuilding(img, file.name);
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+
+            analyzeAndCreateBuilding(img, filename) {
+                // Create temporary canvas for analysis
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCanvas.width = img.width;
+                tempCanvas.height = img.height;
+
+                tempCtx.drawImage(img, 0, 0);
+                const imageData = tempCtx.getImageData(0, 0, img.width, img.height);
+
+                // Find vertex
+                const vertex = this.findIsometryVertex(imageData, img.width, img.height);
+
+                if (!vertex) {
+                    this.showError(`Could not find isometry vertex for ${filename}`);
+                    return;
+                }
+
+                // Create building
+                const buildingId = this.nextBuildingId++;
+                const building = new IsometricBuilding(
+                    buildingId,
+                    img,
+                    vertex.x,
+                    vertex.y,
+                    img.width,
+                    img.height
+                );
+
+                this.buildings.set(buildingId, building);
+                this.updateBuildingList();
+                this.updateOcclusionAnalysis();
+                this.draw();
+            }
+
+            findIsometryVertex(imageData, width, height) {
+                const alphaThreshold = parseInt(document.getElementById('alphaThreshold').value);
+
+                for (let y = height - 1; y >= 0; y--) {
+                    for (let x = 0; x < width; x++) {
+                        const index = (y * width + x) * 4;
+                        const alpha = imageData.data[index + 3];
+                        if (alpha > alphaThreshold) {
+                            return { x, y };
+                        }
+                    }
+                }
+                return null;
+            }
+
+            updateBuildingList() {
+                const list = document.getElementById('buildingList');
+                list.innerHTML = '';
+
+                this.buildings.forEach((building, id) => {
+                    const item = document.createElement('div');
+                    item.className = 'building-item';
+                    item.dataset.buildingId = id;
+
+                    if (this.selectedBuilding === id) {
+                        item.classList.add('selected');
+                    }
+
+                    const img = document.createElement('img');
+                    img.src = building.imageElement.src;
+
+                    const info = document.createElement('div');
+                    info.className = 'building-info';
+                    info.innerHTML = `
+                        <div><strong>Building ${id}</strong></div>
+                        <div>Vertex: <span class="coordinates">(${building.x + building.vertexX}, ${building.y + building.vertexY})</span> [canvas]</div>
+                        <div>Left Horizon: <span class="coordinates">(${building.x + building.horizons.left.x}, ${(building.y + building.horizons.left.y).toFixed(1)})</span> [canvas]</div>
+                        <div>Right Horizon: <span class="coordinates">(${building.x + building.horizons.right.x}, ${(building.y + building.horizons.right.y).toFixed(1)})</span> [canvas]</div>
+                        <div>Size: ${building.imageWidth}×${building.imageHeight}</div>
+                        <div>Position: <span class="coordinates">(${building.x}, ${building.y})</span></div>
+                        <div>Base Z-Index: ${building.zIndex}</div>
+                        <div>Display Z-Index: ${building.displayZIndex || 'Not calculated'}</div>
+                    `;
+
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'delete-btn';
+                    deleteBtn.textContent = '×';
+                    deleteBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        this.deleteBuilding(id);
+                    };
+
+                    item.appendChild(img);
+                    item.appendChild(info);
+                    item.appendChild(deleteBtn);
+
+                    item.addEventListener('click', () => {
+                        this.selectedBuilding = this.selectedBuilding === id ? null : id;
+                        this.updateBuildingList();
+                        this.draw();
+                    });
+
+                    item.addEventListener('dragstart', (e) => {
+                        e.dataTransfer.setData('text/plain', id);
+                    });
+                    item.draggable = true;
+
+                    list.appendChild(item);
+                });
+            }
+
+            deleteBuilding(id) {
+                this.buildings.delete(id);
+                if (this.selectedBuilding === id) {
+                    this.selectedBuilding = null;
+                }
+                this.updateBuildingList();
+                this.updateOcclusionAnalysis();
+                this.draw();
+            }
+
+            onCanvasMouseDown(e) {
+                const rect = this.canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                // Check if clicking on a building
+                const buildingsArray = Array.from(this.buildings.values())
+                    .sort((a, b) => b.zIndex - a.zIndex); // Check highest z-index first
+
+                for (const building of buildingsArray) {
+                    if (building.containsPoint(x, y)) {
+                        this.dragging = building;
+                        this.dragOffset = {
+                            x: x - building.x,
+                            y: y - building.y
+                        };
+                        this.selectedBuilding = building.id;
+                        this.updateBuildingList();
+                        this.draw();
+                        break;
+                    }
+                }
+            }
+
+            onCanvasMouseMove(e) {
+                if (!this.dragging) return;
+
+                const rect = this.canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                this.dragging.setPosition(
+                    x - this.dragOffset.x,
+                    y - this.dragOffset.y
+                );
+
+                this.updateBuildingList();
+                this.updateOcclusionAnalysis();
+                this.draw();
+            }
+
+            onCanvasMouseUp(e) {
+                this.dragging = null;
+            }
+
+            updateOcclusionAnalysis() {
+                const results = document.getElementById('occlusionResults');
+                const buildingsArray = Array.from(this.buildings.values());
+
+                if (buildingsArray.length < 2) {
+                    results.innerHTML = '<p style="color: #666; font-style: italic;">Need at least 2 buildings to analyze occlusion</p>';
+                    return;
+                }
+
+                let html = '<h5 style="margin-bottom: 10px; color: #333;">Advanced Z-Index & Occlusion Analysis:</h5>';
+                let hasAnalysis = false;
+
+                // Find overlapping pairs
+                const overlappingPairs = [];
+                buildingsArray.forEach(buildingA => {
+                    buildingsArray.forEach(buildingB => {
+                        if (buildingA.id < buildingB.id) { // Avoid duplicates
+                            const boundsA = buildingA.getBounds();
+                            const boundsB = buildingB.getBounds();
+
+                            if (buildingA.boundingBoxesOverlap(boundsA, boundsB)) {
+                                overlappingPairs.push([buildingA, buildingB]);
+                            }
+                        }
+                    });
+                });
+
+                if (overlappingPairs.length > 0) {
+                    html += '<div style="background: #e8f5e8; padding: 10px; border-radius: 5px; margin-bottom: 10px;">';
+                    html += '<strong>📦 Overlapping Buildings (Advanced Z-Index Logic Applied):</strong>';
+
+                    overlappingPairs.forEach(([buildingA, buildingB]) => {
+                        hasAnalysis = true;
+
+                        // Determine larger and smaller
+                        const areaA = buildingA.imageWidth * buildingA.imageHeight;
+                        const areaB = buildingB.imageWidth * buildingB.imageHeight;
+                        const largerBuilding = areaA >= areaB ? buildingA : buildingB;
+                        const smallerBuilding = areaA >= areaB ? buildingB : buildingA;
+
+                        const smallerVertexX = smallerBuilding.x + smallerBuilding.vertexX;
+                        const smallerVertexY = smallerBuilding.y + smallerBuilding.vertexY;
+                        const largerVertexX = largerBuilding.x + largerBuilding.vertexX;
+
+                        const isOnRightSide = smallerVertexX > largerVertexX;
+                        const largerVertexY = largerBuilding.y + largerBuilding.vertexY;
+
+                        // Get the appropriate horizon point in canvas coordinates
+                        let horizonCanvasX, horizonCanvasY;
+                        if (isOnRightSide) {
+                            horizonCanvasX = largerBuilding.x + largerBuilding.horizons.right.x;
+                            horizonCanvasY = largerBuilding.y + largerBuilding.horizons.right.y;
+                        } else {
+                            horizonCanvasX = largerBuilding.x + largerBuilding.horizons.left.x;
+                            horizonCanvasY = largerBuilding.y + largerBuilding.horizons.left.y;
+                        }
+
+                        // Calculate the Y coordinate on the diagonal line from vertex to horizon point
+                        // at the X coordinate of the smaller building's vertex
+                        const deltaX = horizonCanvasX - largerVertexX;
+                        let isBelowDiagonalLine, diagonalYAtSmallerX;
+
+                        if (Math.abs(deltaX) < 0.001) {
+                            // Vertical line case - compare X positions instead
+                            isBelowDiagonalLine = smallerVertexX > largerVertexX;
+                            diagonalYAtSmallerX = largerVertexY; // Not really applicable for vertical line
+                        } else {
+                            diagonalYAtSmallerX = largerVertexY +
+                                (horizonCanvasY - largerVertexY) *
+                                (smallerVertexX - largerVertexX) /
+                                deltaX;
+
+                            // Check if smaller building vertex is below the diagonal line
+                            isBelowDiagonalLine = smallerVertexY > diagonalYAtSmallerX;
+                        }
+
+                        const zIndexRelation = smallerBuilding.displayZIndex > largerBuilding.displayZIndex ? 'IN FRONT' : 'BEHIND';
+                        const sideText = isOnRightSide ? 'right' : 'left';
+                        const positionText = isBelowDiagonalLine ? 'below' : 'above';
+                        const expectedResult = isBelowDiagonalLine ? 'should be IN FRONT' : 'should be BEHIND';
+
+                        html += `<div class="occlusion-item" style="border-left: 3px solid #007bff; margin: 8px 0;">
+                            <strong>B${smallerBuilding.id} vs B${largerBuilding.id}</strong> (overlapping)<br>
+                            <small style="color: #666;">
+                                • Larger: B${largerBuilding.id} (${areaA >= areaB ? areaA : areaB}px²)<br>
+                                • Smaller: B${smallerBuilding.id} (${areaA >= areaB ? areaB : areaA}px²)<br>
+                                <br><strong>Horizon Points (Canvas Coordinates):</strong><br>
+                                • B${largerBuilding.id} Left: (${largerBuilding.x + largerBuilding.horizons.left.x}, ${(largerBuilding.y + largerBuilding.horizons.left.y).toFixed(1)})<br>
+                                • B${largerBuilding.id} Right: (${largerBuilding.x + largerBuilding.horizons.right.x}, ${(largerBuilding.y + largerBuilding.horizons.right.y).toFixed(1)})<br>
+                                • B${smallerBuilding.id} Left: (${smallerBuilding.x + smallerBuilding.horizons.left.x}, ${(smallerBuilding.y + smallerBuilding.horizons.left.y).toFixed(1)})<br>
+                                • B${smallerBuilding.id} Right: (${smallerBuilding.x + smallerBuilding.horizons.right.x}, ${(smallerBuilding.y + smallerBuilding.horizons.right.y).toFixed(1)})<br>
+                                <br><strong>Analysis:</strong><br>
+                                • B${smallerBuilding.id} vertex: (${smallerVertexX.toFixed(1)}, ${smallerVertexY.toFixed(1)})<br>
+                                • B${largerBuilding.id} vertex: (${largerVertexX.toFixed(1)}, ${largerBuilding.y + largerBuilding.vertexY})<br>
+                                • B${smallerBuilding.id} is on <strong>${sideText}</strong> side of B${largerBuilding.id}'s vertex<br>
+                                • B${smallerBuilding.id} is <strong>${positionText}</strong> the diagonal line (vertex to ${sideText} horizon)<br>
+                                • Diagonal Y at B${smallerBuilding.id}'s X: ${diagonalYAtSmallerX.toFixed(1)}<br>
+                                • Logic: ${positionText} diagonal = ${expectedResult}<br>
+                                • Result: B${smallerBuilding.id} renders <strong>${zIndexRelation}</strong><br>
+                                • Base Z-indexes: B${buildingA.id}=${buildingA.zIndex}, B${buildingB.id}=${buildingB.zIndex}<br>
+                                • Display Z-indexes: B${buildingA.id}=${buildingA.displayZIndex || 'calculating...'}, B${buildingB.id}=${buildingB.displayZIndex || 'calculating...'}
+                            </small>
+                        </div>`;
+                    });
+
+                    html += '</div>';
+                }
+
+                // Regular occlusion analysis for non-overlapping
+                buildingsArray.forEach(buildingA => {
+                    buildingsArray.forEach(buildingB => {
+                        if (buildingA.id !== buildingB.id) {
+                            const boundsA = buildingA.getBounds();
+                            const boundsB = buildingB.getBounds();
+
+                            // Only show if not overlapping (handled above)
+                            if (!buildingA.boundingBoxesOverlap(boundsA, boundsB)) {
+                                const bVertexWorldX = buildingB.x + buildingB.vertexX;
+                                const bVertexWorldY = buildingB.y + buildingB.vertexY;
+
+                                const vertexInFront = buildingA.isPointInFront(bVertexWorldX, bVertexWorldY);
+
+                                if (vertexInFront) {
+                                    hasAnalysis = true;
+                                    html += `<div class="occlusion-item" style="border-left: 3px solid #28a745;">
+                                        <strong>B${buildingB.id} is OCCLUDED by B${buildingA.id}</strong> (non-overlapping)<br>
+                                        <small style="color: #666;">
+                                            • Standard horizon-based occlusion detection<br>
+                                            • B${buildingB.id} vertex in B${buildingA.id}'s front zone
+                                        </small>
+                                    </div>`;
+                                }
+                            }
+                        }
+                    });
+                });
+
+                if (!hasAnalysis) {
+                    html += '<p style="color: #666;">No occlusion or overlap relationships detected</p>';
+                    html += '<small style="color: #999;">Try overlapping buildings to see advanced z-index logic</small>';
+                }
+
+                results.innerHTML = html;
+            }
+
+            draw() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+                // Calculate contextual z-indexes for all buildings
+                const buildingsWithContextualZIndex = [];
+                this.buildings.forEach(building => {
+                    const contextualZIndex = building.getContextualZIndex(this.buildings);
+                    buildingsWithContextualZIndex.push({
+                        building,
+                        contextualZIndex
+                    });
+                });
+
+                // Sort by contextual z-index for proper rendering order
+                buildingsWithContextualZIndex.sort((a, b) => a.contextualZIndex - b.contextualZIndex);
+
+                buildingsWithContextualZIndex.forEach(({ building, contextualZIndex }) => {
+                    // Update building's display z-index
+                    building.displayZIndex = contextualZIndex;
+
+                    // Draw building
+                    this.ctx.drawImage(
+                        building.imageElement,
+                        building.x,
+                        building.y,
+                        building.imageWidth,
+                        building.imageHeight
+                    );
+
+                    // Always draw vertex and horizon points for all buildings
+                    this.drawVertexAndHorizons(building);
+
+                    // Draw horizon lines if selected
+                    if (this.selectedBuilding === building.id) {
+                        this.drawHorizonLines(building);
+
+                        // Draw selection border
+                        this.ctx.strokeStyle = '#28a745';
+                        this.ctx.lineWidth = 3;
+                        this.ctx.strokeRect(building.x, building.y, building.imageWidth, building.imageHeight);
+                    }
+
+                    // Draw building ID with contextual z-index
+                    this.ctx.fillStyle = 'white';
+                    this.ctx.font = 'bold 12px Arial';
+                    this.ctx.fillText(`B${building.id} (z:${contextualZIndex})`, building.x + 5, building.y + 16);
+                    this.ctx.strokeStyle = 'black';
+                    this.ctx.lineWidth = 1;
+                    this.ctx.strokeText(`B${building.id} (z:${contextualZIndex})`, building.x + 5, building.y + 16);
+                });
+            }
+
+            drawVertexAndHorizons(building) {
+                const vertexWorldX = building.x + building.vertexX;
+                const vertexWorldY = building.y + building.vertexY;
+                const leftHorizonX = building.x + building.horizons.left.x;
+                const leftHorizonY = building.y + building.horizons.left.y;
+                const rightHorizonX = building.x + building.horizons.right.x;
+                const rightHorizonY = building.y + building.horizons.right.y;
+
+                // Draw vertex point (red circle)
+                this.ctx.fillStyle = 'red';
+                this.ctx.beginPath();
+                this.ctx.arc(vertexWorldX, vertexWorldY, 5, 0, 2 * Math.PI);
+                this.ctx.fill();
+
+                // Draw white border for visibility
+                this.ctx.strokeStyle = 'white';
+                this.ctx.lineWidth = 2;
+                this.ctx.stroke();
+
+                // Draw left horizon point (blue circle)
+                this.ctx.fillStyle = 'blue';
+                this.ctx.beginPath();
+                this.ctx.arc(leftHorizonX, leftHorizonY, 4, 0, 2 * Math.PI);
+                this.ctx.fill();
+
+                // Draw white border for visibility
+                this.ctx.strokeStyle = 'white';
+                this.ctx.lineWidth = 2;
+                this.ctx.stroke();
+
+                // Draw right horizon point (green circle)
+                this.ctx.fillStyle = 'green';
+                this.ctx.beginPath();
+                this.ctx.arc(rightHorizonX, rightHorizonY, 4, 0, 2 * Math.PI);
+                this.ctx.fill();
+
+                // Draw white border for visibility
+                this.ctx.strokeStyle = 'white';
+                this.ctx.lineWidth = 2;
+                this.ctx.stroke();
+
+                // Draw labels for the points
+                this.ctx.fillStyle = 'white';
+                this.ctx.font = 'bold 10px Arial';
+                this.ctx.strokeStyle = 'black';
+                this.ctx.lineWidth = 1;
+
+                // Vertex label
+                const vLabel = 'V';
+                this.ctx.fillText(vLabel, vertexWorldX + 8, vertexWorldY - 8);
+                this.ctx.strokeText(vLabel, vertexWorldX + 8, vertexWorldY - 8);
+
+                // Left horizon label
+                const lLabel = 'L';
+                this.ctx.fillText(lLabel, leftHorizonX - 15, leftHorizonY - 8);
+                this.ctx.strokeText(lLabel, leftHorizonX - 15, leftHorizonY - 8);
+
+                // Right horizon label
+                const rLabel = 'R';
+                this.ctx.fillText(rLabel, rightHorizonX + 8, rightHorizonY - 8);
+                this.ctx.strokeText(rLabel, rightHorizonX + 8, rightHorizonY - 8);
+            }
+
+            drawHorizonLines(building) {
+                const vertexWorldX = building.x + building.vertexX;
+                const vertexWorldY = building.y + building.vertexY;
+
+                this.ctx.strokeStyle = 'blue';
+                this.ctx.lineWidth = 2;
+                this.ctx.setLineDash([5, 5]);
+
+                // Left horizon line
+                this.ctx.beginPath();
+                this.ctx.moveTo(building.x, building.y + building.horizons.left.y);
+                this.ctx.lineTo(vertexWorldX, vertexWorldY);
+                this.ctx.stroke();
+
+                // Right horizon line
+                this.ctx.beginPath();
+                this.ctx.moveTo(vertexWorldX, vertexWorldY);
+                this.ctx.lineTo(building.x + building.imageWidth, building.y + building.horizons.right.y);
+                this.ctx.stroke();
+
+                this.ctx.setLineDash([]);
+            }
+
+            clearAll() {
+                this.buildings.clear();
+                this.selectedBuilding = null;
+                this.updateBuildingList();
+                this.updateOcclusionAnalysis();
+                this.draw();
+            }
+
+            showError(message) {
+                const errorDiv = document.getElementById('errorDisplay');
+                errorDiv.textContent = message;
+                errorDiv.classList.remove('hidden');
+                setTimeout(() => {
+                    errorDiv.classList.add('hidden');
+                }, 5000);
+            }
+        }
+
+        // Initialize the app
+        let app;
+        document.addEventListener('DOMContentLoaded', () => {
+            app = new IsometricApp();
+        });
+    </script>
+</body>
+</html>

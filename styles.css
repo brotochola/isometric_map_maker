@@ -1,0 +1,178 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+#toolbar {
+  background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+  padding: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  border-bottom: 3px solid #3498db;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+#toolbar input[type="file"] {
+  display: none;
+}
+
+#toolbar button {
+  background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+#toolbar button:hover {
+  background: linear-gradient(135deg, #2980b9 0%, #21618c 100%);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+#toolbar button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+#toolbar .export-group button {
+  background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+}
+
+#toolbar .export-group button:hover {
+  background: linear-gradient(135deg, #229954 0%, #1e8449 100%);
+}
+
+#toolbar input[type="range"] {
+  width: 80px;
+  margin: 0 5px;
+}
+
+#toolbar input[type="number"] {
+  background: #34495e;
+  color: white;
+  border: 1px solid #556983;
+  border-radius: 4px;
+  padding: 4px 6px;
+  width: 60px;
+}
+
+#toolbar label {
+  color: #ecf0f1;
+  font-weight: 500;
+  font-size: 13px;
+  margin-left: 12px;
+}
+
+#toolbar label:first-of-type {
+  margin-left: 0;
+}
+
+#toolbar span {
+  color: #bdc3c7;
+  margin-right: 8px;
+}
+
+.toolbar-section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border-right: 1px solid #556983;
+}
+
+.toolbar-section:last-child {
+  border-right: none;
+}
+
+#editor {
+  position: relative;
+  width: 1000vw;
+  height: 1000vh;
+  overflow: visible;
+  background: #f0f0f0;
+  border-top: 1px solid #aaa;
+}
+
+#editor-container {
+  position: relative;
+  width: 100vw;
+  height: calc(100vh - 40px);
+  overflow: hidden;
+  background: #f0f0f0;
+  border-top: 1px solid #aaa;
+}
+
+#editor-container.panning {
+  cursor: grab;
+}
+
+#editor-container.panning:active {
+  cursor: grabbing;
+}
+
+.item {
+  border: 1px solid transparent;
+  box-sizing: content-box;
+  position: absolute;
+  left: var(--item-x, 0px);
+  top: var(--item-y, 0px);
+  width: var(--item-width, auto);
+  height: var(--item-height, auto);
+  cursor: move;
+  user-select: none;
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  pointer-events: auto;
+  overflow: visible;
+  z-index: 2;
+  background-image: var(--item-image);
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  /* filter: url(#floor-shadow); */
+}
+
+.guide-line {
+  position: absolute;
+  width: 2px;
+  background-color: rgba(0, 0, 255, 0.5);
+  opacity: 0.8;
+  pointer-events: none;
+  z-index: 9999;
+  transform-origin: center center;
+  display: none;
+}
+
+.h-guide-line {
+  position: absolute;
+  height: 2px;
+  background-color: rgba(0, 0, 255, 0.5);
+  opacity: 0.8;
+  pointer-events: none;
+  z-index: 9999;
+  display: none;
+}
+
+.item:hover {
+  border: 1px solid rgba(0, 0, 255, 0.5);
+}
+
+/* When an item is pinned to background, show yellow bounding box on hover */
+.item.background:hover {
+  border: 1px solid yellow;
+}
