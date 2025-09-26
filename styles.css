@@ -172,3 +172,42 @@ body {
 .item.background:hover {
   border: 1px solid orange;
 }
+
+/* Tooltip styles */
+#item-tooltip {
+  position: fixed;
+  background: rgba(44, 62, 80, 0.95);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  z-index: 1067867868000;
+  pointer-events: none;
+  display: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(52, 152, 219, 0.6);
+  max-width: 200px;
+  line-height: 1.4;
+}
+
+#item-tooltip.show {
+  display: block;
+}
+
+#item-tooltip .tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  margin: 2px 0;
+  white-space: nowrap;
+}
+
+#item-tooltip .tooltip-label {
+  color: #bdc3c7;
+  margin-right: 8px;
+}
+
+#item-tooltip .tooltip-value {
+  color: #ecf0f1;
+  font-weight: 500;
+}

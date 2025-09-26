@@ -25,6 +25,7 @@ let hoveredItem = null; // Track currently hovered item for deletion
 let guideLineAngle = 60; // Current guide line angle in degrees
 let gridSize = 80; // Current grid size in pixels
 let gridElement = null; // Grid overlay element
+let tooltip = null; // Item info tooltip element
 // Undo stack
 let undoStack = [];
 const UNDO_LIMIT = 20;
@@ -34,6 +35,115 @@ function pushAction(action) {
   if (isPerformingUndo) return;
   undoStack.push(action);
   if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+}
+
+// Create tooltip element
+function createTooltip() {
+  if (tooltip) return tooltip;
+
+  tooltip = document.createElement("div");
+  tooltip.id = "item-tooltip";
+  document.body.appendChild(tooltip);
+  return tooltip;
+}
+
+// Show tooltip with item information
+function showTooltip(item, mouseEvent) {
+  if (!tooltip) createTooltip();
+
+  // Get item dimensions and properties
+  const itemWidth =
+    parseFloat(item.el.style.getPropertyValue("--item-width")) || 0;
+  const itemHeight =
+    parseFloat(item.el.style.getPropertyValue("--item-height")) || 0;
+  const zIndex = item.el.style.zIndex || "auto";
+  const transform = item.el.style.transform || "scaleX(1)";
+  const scaleX = transform.includes("scaleX(-1)") ? "-1" : "1";
+
+  // Format position values
+  const positionX = Math.round(item.x);
+  const positionY = Math.round(item.y);
+
+  // Create tooltip content
+  const tooltipContent = `
+    <div class="tooltip-row">
+      <span class="tooltip-label">Type:</span>
+      <span class="tooltip-value">${item.type}</span>
+    </div>
+    <div class="tooltip-row">
+      <span class="tooltip-label">Position:</span>
+      <span class="tooltip-value">${positionX}, ${positionY}</span>
+    </div>
+    <div class="tooltip-row">
+      <span class="tooltip-label">Size:</span>
+      <span class="tooltip-value">${Math.round(itemWidth)} × ${Math.round(
+    itemHeight
+  )}</span>
+    </div>
+    <div class="tooltip-row">
+      <span class="tooltip-label">Z-Index:</span>
+      <span class="tooltip-value">${zIndex}</span>
+    </div>
+    <div class="tooltip-row">
+      <span class="tooltip-label">ScaleX:</span>
+      <span class="tooltip-value">${scaleX}</span>
+    </div>
+    <div class="tooltip-row">
+      <span class="tooltip-label">Background:</span>
+      <span class="tooltip-value">${item.background ? "Yes" : "No"}</span>
+    </div>
+    <div class="tooltip-row">
+      <span class="tooltip-label">Isometric:</span>
+      <span class="tooltip-value">${item.isometric ? "Yes" : "No"}</span>
+    </div>
+  `;
+
+  tooltip.innerHTML = tooltipContent;
+  tooltip.classList.add("show");
+
+  // Position tooltip at the right-top corner of the item
+  const itemX = parseFloat(item.el.style.getPropertyValue("--item-x")) || 0;
+  const itemY = parseFloat(item.el.style.getPropertyValue("--item-y")) || 0;
+
+  // Convert item coordinates to viewport coordinates (accounting for zoom and pan)
+  const containerRect = editorContainer.getBoundingClientRect();
+
+  // Calculate item's right-top position in viewport coordinates
+  const itemRightX =
+    (itemX + itemWidth) * zoomLevel + editorOffsetX + containerRect.left;
+  const itemTopY = itemY * zoomLevel + editorOffsetY + containerRect.top;
+
+  // Small offset from the item's edge
+  const offsetX = 8;
+  const offsetY = -8;
+
+  tooltip.style.left = itemRightX + offsetX + "px";
+  tooltip.style.top = itemTopY + offsetY + "px";
+
+  // Adjust position if tooltip would go off screen
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const windowWidth = window.innerWidth;
+  const windowHeight = window.innerHeight;
+
+  if (tooltipRect.right > windowWidth) {
+    // Position to the left of the item instead
+    const itemLeftX = itemX * zoomLevel + editorOffsetX + containerRect.left;
+    tooltip.style.left = itemLeftX - tooltipRect.width - offsetX + "px";
+  }
+
+  if (tooltipRect.top < 0) {
+    // Position below the item instead
+    const itemBottomY =
+      (itemY + itemHeight) * zoomLevel + editorOffsetY + containerRect.top;
+    tooltip.style.top = itemBottomY + offsetX + "px";
+  }
+}
+
+// Hide tooltip
+function hideTooltip() {
+  if (tooltip) {
+    tooltip.classList.remove("show");
+  }
 }
 
 // Helper to recreate an item from saved data (used for undo delete)
@@ -81,6 +191,7 @@ function recreateItemFromData(data) {
     el: div,
     flipped: !!data.flipped,
     background: !!data.background,
+    isometric: !!data.isometric,
   };
   if (newItem.background) {
     div.classList.add("background");
@@ -148,6 +259,24 @@ function undo() {
         } else {
           it.el.classList.remove("background");
           updateAllZIndexes();
+        }
+      }
+    } else if (action.type === "isometric") {
+      const it = items.find(
+        (i) => i.id === action.itemId && i.type === action.itemType
+      );
+      if (it) {
+        it.isometric = action.previousIsometric;
+        updateAllZIndexes();
+        updateItemHorizon(it);
+
+        // Refresh guide lines if this item is currently hovered
+        if (
+          hoveredItem &&
+          hoveredItem.id === it.id &&
+          hoveredItem.type === it.type
+        ) {
+          showGuideLines(it);
         }
       }
     } else if (action.type === "tiling-add") {
@@ -275,11 +404,19 @@ function updateAllZIndexes() {
     const itemHeight =
       parseFloat(el.style.getPropertyValue("--item-height")) || el.offsetHeight;
 
-    // Compute horizon distance from bottom of the image (px)
-    const originFromBottom = calculateIsometricHorizon(el);
+    const itemWidth =
+      parseFloat(el.style.getPropertyValue("--item-width")) || el.offsetWidth;
 
-    // Editor Y coordinate of the horizon
-    const horizonY = itemY + itemHeight - originFromBottom;
+    // Compute horizon distance from bottom of the image (px)
+    // Use isometric calculation if item has isometric flag, otherwise use center-bottom
+    let horizonY;
+    if (item.isometric) {
+      // Isometric mode: horizon at bottom minus width * 0.29
+      horizonY = itemY + itemHeight - itemWidth * 0.29;
+    } else {
+      // Default top-down mode: horizon at bottom of image
+      horizonY = itemY + itemHeight;
+    }
 
     // Use horizonY relative to editor's top for stacking
     const relativeHorizon = horizonY - editorRect.top;
@@ -351,8 +488,19 @@ function positionGuideLines(item, guideLines) {
       item.el.naturalHeight ||
       parseFloat(item.el.style.getPropertyValue("--item-height")) ||
       item.el.offsetHeight;
-    const originFromBottom = calculateIsometricHorizon(item.el);
-    const horizonY = itemY + itemHeight - originFromBottom; // editor Y coordinate for the horizon
+    const itemWidth =
+      parseFloat(item.el.style.getPropertyValue("--item-width")) ||
+      item.el.offsetWidth;
+
+    // Use same logic as z-index calculation for horizon position
+    let horizonY;
+    if (item.isometric) {
+      // Isometric mode: horizon at bottom minus width * 0.29
+      horizonY = itemY + itemHeight - itemWidth * 0.29;
+    } else {
+      // Default top-down mode: horizon at bottom of image
+      horizonY = itemY + itemHeight;
+    }
 
     horizLine.style.left = "0px";
     horizLine.style.width = "100%";
@@ -461,6 +609,7 @@ function deleteItem(item) {
       y: item.y,
       flipped: item.flipped,
       background: item.background,
+      isometric: item.isometric,
     };
     // If no asset in pool for this type, include src to ensure undo works
     if (!assetsPool[item.type]) itemDataForUndo.src = item.el.src;
@@ -579,7 +728,15 @@ fileInput.addEventListener("change", (e) => {
       div.style.setProperty("--item-width", tempImg.naturalWidth + "px");
       div.style.setProperty("--item-height", tempImg.naturalHeight + "px");
 
-      const item = { id, type, x, y, el: div, flipped: false };
+      const item = {
+        id,
+        type,
+        x,
+        y,
+        el: div,
+        flipped: false,
+        isometric: false,
+      };
 
       div.style.setProperty("--item-x", x + "px");
       div.style.setProperty("--item-y", y + "px");
@@ -594,6 +751,7 @@ fileInput.addEventListener("change", (e) => {
         y: item.y,
         flipped: false,
         background: false,
+        isometric: false,
       };
       pushAction({ type: "add", item: addData });
 
@@ -684,6 +842,7 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     isSpacePressed = true;
     editorContainer.classList.add("panning");
+    hideTooltip(); // Hide tooltip when entering panning mode
   } else if (e.key === "Delete" && hoveredItem) {
     e.preventDefault();
     deleteItem(hoveredItem);
@@ -721,6 +880,27 @@ document.addEventListener("keydown", (e) => {
         previousBackground: prevBg,
       });
     }
+  } else if (e.key.toLowerCase() === "h") {
+    // Toggle isometric horizon on hovered item
+    if (hoveredItem) {
+      e.preventDefault();
+      const prevIsometric = !!hoveredItem.isometric;
+      hoveredItem.isometric = !hoveredItem.isometric;
+
+      // Update z-indexes and transform-origin after changing isometric mode
+      updateAllZIndexes();
+      updateItemHorizon(hoveredItem);
+
+      // Refresh guide lines to show updated horizon position
+      showGuideLines(hoveredItem);
+
+      pushAction({
+        type: "isometric",
+        itemId: hoveredItem.id,
+        itemType: hoveredItem.type,
+        previousIsometric: prevIsometric,
+      });
+    }
   } else if (
     hoveredItem &&
     (e.key === "ArrowUp" ||
@@ -730,6 +910,7 @@ document.addEventListener("keydown", (e) => {
   ) {
     // Move hovered item 1px with arrow keys
     e.preventDefault();
+    hideTooltip(); // Hide tooltip when moving item with arrow keys
 
     // Store original position for undo
     const fromX = hoveredItem.x;
@@ -803,6 +984,7 @@ document.addEventListener("keydown", (e) => {
   ) {
     // WASD camera movement (10px per keypress)
     e.preventDefault();
+    hideTooltip(); // Hide tooltip when moving camera with WASD
 
     switch (e.key.toLowerCase()) {
       case "s":
@@ -844,6 +1026,7 @@ editorContainer.addEventListener("mousedown", (e) => {
     e.preventDefault();
     isMiddleMousePressed = true;
     editorContainer.classList.add("panning");
+    hideTooltip(); // Hide tooltip when entering panning mode with middle mouse
   }
 
   // Handle panning with either spacebar or middle mouse button
@@ -853,6 +1036,7 @@ editorContainer.addEventListener("mousedown", (e) => {
     panStartX = e.clientX;
     panStartY = e.clientY;
     editorContainer.style.cursor = "grabbing";
+    hideTooltip(); // Hide tooltip when starting to pan
   }
 });
 
@@ -876,6 +1060,7 @@ window.addEventListener("blur", () => {
 document.addEventListener("mousemove", (e) => {
   if (isPanning && (isSpacePressed || isMiddleMousePressed)) {
     e.preventDefault();
+    hideTooltip(); // Ensure tooltip stays hidden during panning
     const deltaX = e.clientX - panStartX;
     const deltaY = e.clientY - panStartY;
 
@@ -1029,6 +1214,9 @@ async function buildExportData(includeAssets) {
     }
     if (i.background) {
       itemData.background = true;
+    }
+    if (i.isometric) {
+      itemData.isometric = true;
     }
     return itemData;
   });
@@ -1278,6 +1466,7 @@ exportWithoutAssetsBtn.addEventListener("click", async () => {
 // Zoom functionality with mouse wheel
 function handleZoom(e, mouseX, mouseY) {
   e.preventDefault();
+  hideTooltip(); // Hide tooltip when zooming
 
   const zoomDelta = e.deltaY > 0 ? -zoomStep : zoomStep;
   const oldZoom = zoomLevel;
@@ -1630,6 +1819,7 @@ function createItemFromSrc(itemData, src) {
       el: div,
       flipped: itemData.scaleX === -1,
       background: !!itemData.background,
+      isometric: !!itemData.isometric,
     };
 
     // Apply flip transform if item was flipped
@@ -1668,12 +1858,13 @@ function makeDraggable(el, item) {
   el.addEventListener("dragstart", (e) => e.preventDefault());
   el.addEventListener("contextmenu", (e) => e.preventDefault());
 
-  // Add hover event listeners for guide lines
-  el.addEventListener("mouseenter", () => {
+  // Add hover event listeners for guide lines and tooltip
+  el.addEventListener("mouseenter", (e) => {
     if (!dragging) {
       // console.log("Showing guide lines for item:", item.id, item.type);
       hoveredItem = item; // Track hovered item for deletion
       showGuideLines(item);
+      showTooltip(item, e);
     }
   });
 
@@ -1682,14 +1873,18 @@ function makeDraggable(el, item) {
       // console.log("Hiding guide lines for item:", item.id, item.type);
       hoveredItem = null; // Clear hovered item
       hideGuideLines(item);
+      hideTooltip();
     }
   });
+
+  // No need for mousemove listener since tooltip is anchored to item position
 
   el.addEventListener("mousedown", (e) => {
     e.preventDefault(); // Prevent default behavior
     if (e.button !== 0) return;
     if (el.classList.contains("background")) return;
     dragging = true;
+    hideTooltip(); // Hide tooltip when starting to drag
     const isDuplicating = e.altKey; // Check if Alt key is held
 
     // Calculate offset using the same coordinate system as mousemove
@@ -1761,6 +1956,7 @@ function makeDraggable(el, item) {
         el: newImg,
         flipped: item.flipped,
         background: false,
+        isometric: item.isometric,
       };
 
       // Apply flip transform if original was flipped
@@ -1781,6 +1977,7 @@ function makeDraggable(el, item) {
           y: duplicatedItem.y,
           flipped: duplicatedItem.flipped,
           background: false,
+          isometric: duplicatedItem.isometric,
         };
         if (!assetsPool[duplicatedItem.type]) {
           const imageUrl = newImg.style.getPropertyValue("--item-image");
@@ -1819,6 +2016,7 @@ function makeDraggable(el, item) {
     const handleMouseMove = (e) => {
       if (!dragging) return;
       e.preventDefault();
+      hideTooltip(); // Ensure tooltip stays hidden during item dragging
 
       // Convert mouse position to editor coordinate system accounting for zoom
       const containerRect = editorContainer.getBoundingClientRect();
@@ -2063,26 +2261,34 @@ function updateAllGuideLineAngles() {
 // Based on image half-width and the current grid angle. If the
 // intersection point (where the angled guide line meets the top of
 // the image) lies outside the image bounds, the value is clamped.
-function calculateIsometricHorizon(img) {
+function calculateIsometricHorizon(img, isometric) {
   const W = img.naturalWidth || img.width || 0;
   const H = img.naturalHeight || img.height || 0;
   if (W === 0 || H === 0) return 0;
 
-  const halfW = W / 2;
-  const theta = (guideLineAngle * Math.PI) / 180; // angle in radians measured from vertical
-  const tanTheta = Math.tan(theta);
+  if (isometric) {
+    // Isometric mode: use width-based calculation
+    return W * 0.29; // px from bottom
+  } else {
+    // Default top-down mode: origin at bottom (0 px from bottom)
+    return 0;
+  }
 
-  // Vertical rise from bottom to the intersection point where the
-  // angled guide (starting at bottom center) reaches the image edge:
-  // y = halfWidth / tan(theta)
-  let y = halfW / tanTheta;
+  // const halfW = W / 2;
+  // const theta = (guideLineAngle * Math.PI) / 180; // angle in radians measured from vertical
+  // const tanTheta = Math.tan(theta);
 
-  // Clamp to image height
-  if (!isFinite(y)) y = 0;
-  if (y < 0) y = 0;
-  if (y > H) y = H;
+  // // Vertical rise from bottom to the intersection point where the
+  // // angled guide (starting at bottom center) reaches the image edge:
+  // // y = halfWidth / tan(theta)
+  // let y = halfW / tanTheta;
 
-  return y; // px from bottom
+  // // Clamp to image height
+  // if (!isFinite(y)) y = 0;
+  // if (y < 0) y = 0;
+  // if (y > H) y = H;
+
+  // return W * 0.29; //y; // px from bottom
 }
 
 // Update transform-origin for a single item element so its pivot is
@@ -2095,7 +2301,7 @@ function updateItemHorizon(item) {
     return;
 
   const H = img.naturalHeight;
-  const originFromBottom = calculateIsometricHorizon(img);
+  const originFromBottom = calculateIsometricHorizon(img, item.isometric);
   const originY = Math.max(0, H - originFromBottom); // px from top
   const originX = (img.naturalWidth || img.width) / 2;
 
