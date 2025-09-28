@@ -18,6 +18,7 @@
             <button onclick="document.getElementById('fileInput').click()">📁 Add Images</button>
             <button id="tilingBtn">🖼️ Add Background</button>
             <button id="loadSceneBtn">📂 Load Scene</button>
+            <button id="assetManagerBtn">🔧 Asset Manager</button>
         </div>
 
         <!-- Export section -->
@@ -51,7 +52,21 @@
         <div id="editor"></div>
     </div>
 
+    <!-- Asset Management Panel -->
+    <div id="assetPanel" class="asset-panel">
+        <div class="asset-panel-header">
+            <h3>Asset Manager</h3>
+            <button id="closeAssetPanel" class="close-btn">&times;</button>
+        </div>
+        <div class="asset-panel-content">
+            <div id="assetList" class="asset-list">
+                <!-- Asset items will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
 
+    <!-- Hidden input for asset replacement -->
+    <input type="file" id="replaceAssetInput" accept="image/*" style="display: none;">
 
     <script src="script.js"></script>
 

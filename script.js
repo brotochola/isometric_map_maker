@@ -14,6 +14,11 @@ const angleInput = document.getElementById("angleInput");
 const gridSizeSlider = document.getElementById("gridSizeSlider");
 const gridSizeInput = document.getElementById("gridSizeInput");
 const gridCheckbox = document.getElementById("gridCheckbox");
+const assetManagerBtn = document.getElementById("assetManagerBtn");
+const assetPanel = document.getElementById("assetPanel");
+const closeAssetPanel = document.getElementById("closeAssetPanel");
+const assetList = document.getElementById("assetList");
+const replaceAssetInput = document.getElementById("replaceAssetInput");
 
 let items = []; // {id, type, x, y, el}
 let tilingSprite = null; // {id, el, width, height}
@@ -102,16 +107,24 @@ function showTooltip(item, mouseEvent) {
   tooltip.classList.add("show");
 
   // Position tooltip at the right-top corner of the item
-  const itemX = parseFloat(item.el.style.getPropertyValue("--item-x")) || 0;
-  const itemY = parseFloat(item.el.style.getPropertyValue("--item-y")) || 0;
+  // Get item position (center-X, bottom-Y in new coordinate system)
+  const itemCenterX =
+    parseFloat(item.el.style.getPropertyValue("--item-x")) || 0;
+  const itemBottomY =
+    parseFloat(item.el.style.getPropertyValue("--item-y")) || 0;
 
   // Convert item coordinates to viewport coordinates (accounting for zoom and pan)
   const containerRect = editorContainer.getBoundingClientRect();
 
   // Calculate item's right-top position in viewport coordinates
+  // itemCenterX is center, so right edge = center + width/2
   const itemRightX =
-    (itemX + itemWidth) * zoomLevel + editorOffsetX + containerRect.left;
-  const itemTopY = itemY * zoomLevel + editorOffsetY + containerRect.top;
+    (itemCenterX + itemWidth / 2) * zoomLevel +
+    editorOffsetX +
+    containerRect.left;
+  // itemBottomY is bottom, so top edge = bottom - height
+  const itemTopY =
+    (itemBottomY - itemHeight) * zoomLevel + editorOffsetY + containerRect.top;
 
   // Small offset from the item's edge
   const offsetX = 8;
@@ -127,15 +140,20 @@ function showTooltip(item, mouseEvent) {
 
   if (tooltipRect.right > windowWidth) {
     // Position to the left of the item instead
-    const itemLeftX = itemX * zoomLevel + editorOffsetX + containerRect.left;
+    // itemCenterX is center, so left edge = center - width/2
+    const itemLeftX =
+      (itemCenterX - itemWidth / 2) * zoomLevel +
+      editorOffsetX +
+      containerRect.left;
     tooltip.style.left = itemLeftX - tooltipRect.width - offsetX + "px";
   }
 
   if (tooltipRect.top < 0) {
     // Position below the item instead
-    const itemBottomY =
-      (itemY + itemHeight) * zoomLevel + editorOffsetY + containerRect.top;
-    tooltip.style.top = itemBottomY + offsetX + "px";
+    // itemBottomY is already bottom Y
+    const itemBottomViewportY =
+      itemBottomY * zoomLevel + editorOffsetY + containerRect.top;
+    tooltip.style.top = itemBottomViewportY + offsetX + "px";
   }
 }
 
@@ -245,7 +263,9 @@ function undo() {
       );
       if (it) {
         it.flipped = action.previousFlipped;
-        it.el.style.transform = it.flipped ? "scaleX(-1)" : "scaleX(1)";
+        it.el.style.transform = it.flipped
+          ? "translate(-50%, -100%) scaleX(-1)"
+          : "translate(-50%, -100%)";
       }
     } else if (action.type === "background") {
       const it = items.find(
@@ -398,7 +418,7 @@ function updateAllZIndexes() {
       el.style.zIndex = "1";
       return;
     }
-    // item top-left in editor coordinates (CSS variables store editor coords)
+    // item center-X, bottom-Y in editor coordinates (CSS variables store editor coords)
     const itemX = parseFloat(el.style.getPropertyValue("--item-x")) || 0;
     const itemY = parseFloat(el.style.getPropertyValue("--item-y")) || 0;
     const itemHeight =
@@ -408,14 +428,14 @@ function updateAllZIndexes() {
       parseFloat(el.style.getPropertyValue("--item-width")) || el.offsetWidth;
 
     // Compute horizon distance from bottom of the image (px)
-    // Use isometric calculation if item has isometric flag, otherwise use center-bottom
+    // itemY is already bottom Y, so we use it directly for default mode
     let horizonY;
     if (item.isometric) {
       // Isometric mode: horizon at bottom minus width * 0.29
-      horizonY = itemY + itemHeight - itemWidth * 0.29;
+      horizonY = itemY - itemWidth * 0.29;
     } else {
-      // Default top-down mode: horizon at bottom of image
-      horizonY = itemY + itemHeight;
+      // Default top-down mode: horizon at bottom of image (itemY is already bottom)
+      horizonY = itemY;
     }
 
     // Use horizonY relative to editor's top for stacking
@@ -453,19 +473,15 @@ function createGuideLines(item) {
 
 // Function to position guide lines at the center bottom of an item
 function positionGuideLines(item, guideLines) {
-  // Get item position and dimensions in editor coordinates
-  const itemX = parseFloat(item.el.style.getPropertyValue("--item-x")) || 0;
-  const itemY = parseFloat(item.el.style.getPropertyValue("--item-y")) || 0;
+  // Get item position in editor coordinates (already center-X, bottom-Y)
+  const centerX = parseFloat(item.el.style.getPropertyValue("--item-x")) || 0;
+  const bottomY = parseFloat(item.el.style.getPropertyValue("--item-y")) || 0;
   const itemWidth =
     parseFloat(item.el.style.getPropertyValue("--item-width")) ||
     item.el.offsetWidth;
   const itemHeight =
     parseFloat(item.el.style.getPropertyValue("--item-height")) ||
     item.el.offsetHeight;
-
-  // Calculate center bottom position in editor coordinates
-  const centerX = itemX + itemWidth / 2;
-  const bottomY = itemY + itemHeight;
 
   // Calculate line height (guide lines are in editor coordinate system)
   // Make lines long enough to be visible across the entire editor area
@@ -482,24 +498,15 @@ function positionGuideLines(item, guideLines) {
   // Position horizontal guide line at the computed horizon Y (editor coords)
   const horizLine = document.getElementById(`guide-h-${item.id}-${item.type}`);
   if (horizLine) {
-    // compute horizon relative to the item's top-left editor position
-    // item.el.style.top is item's top in editor coords; horizon is measured from image bottom
-    const imgHeight =
-      item.el.naturalHeight ||
-      parseFloat(item.el.style.getPropertyValue("--item-height")) ||
-      item.el.offsetHeight;
-    const itemWidth =
-      parseFloat(item.el.style.getPropertyValue("--item-width")) ||
-      item.el.offsetWidth;
-
     // Use same logic as z-index calculation for horizon position
+    // bottomY is already the bottom coordinate in the new system
     let horizonY;
     if (item.isometric) {
       // Isometric mode: horizon at bottom minus width * 0.29
-      horizonY = itemY + itemHeight - itemWidth * 0.29;
+      horizonY = bottomY - itemWidth * 0.29;
     } else {
-      // Default top-down mode: horizon at bottom of image
-      horizonY = itemY + itemHeight;
+      // Default top-down mode: horizon at bottom of image (bottomY is already bottom)
+      horizonY = bottomY;
     }
 
     horizLine.style.left = "0px";
@@ -717,12 +724,9 @@ fileInput.addEventListener("change", (e) => {
     // Create temporary image to get dimensions for positioning
     const tempImg = new Image();
     tempImg.onload = () => {
-      const x =
-        (-editorOffsetX + window.innerWidth / 2 - tempImg.naturalWidth / 2) /
-        zoomLevel;
-      const y =
-        (-editorOffsetY + window.innerHeight / 2 - tempImg.naturalHeight) /
-        zoomLevel;
+      // Calculate center X and bottom Y (new positioning system)
+      const x = (-editorOffsetX + window.innerWidth / 2) / zoomLevel;
+      const y = (-editorOffsetY + window.innerHeight / 2) / zoomLevel;
 
       // Set div dimensions to match image
       div.style.setProperty("--item-width", tempImg.naturalWidth + "px");
@@ -731,8 +735,8 @@ fileInput.addEventListener("change", (e) => {
       const item = {
         id,
         type,
-        x,
-        y,
+        x, // Now stores center X
+        y, // Now stores bottom Y
         el: div,
         flipped: false,
         isometric: false,
@@ -820,11 +824,11 @@ function flipItem(item) {
   // Toggle flipped state
   item.flipped = !item.flipped;
 
-  // Apply CSS transform
+  // Apply CSS transform (combine with translate)
   if (item.flipped) {
-    item.el.style.transform = "scaleX(-1)";
+    item.el.style.transform = "translate(-50%, -100%) scaleX(-1)";
   } else {
-    item.el.style.transform = "scaleX(1)";
+    item.el.style.transform = "translate(-50%, -100%)";
   }
 
   console.log("Item flipped state:", item.flipped);
@@ -1178,11 +1182,21 @@ async function convertAssetsForExport(assetsPool) {
           console.log(`Converted ${type} from object URL to base64`);
         })
         .catch((err) => {
-          console.error(`Failed to convert ${type}:`, err);
-          // Keep original URL as fallback
-          convertedAssets[type] = url;
+          console.error(`Failed to convert ${type} to base64:`, err);
+          // NEVER save blob URLs - throw error instead of fallback
+          throw new Error(
+            `Unable to convert ${type} to base64 for export. Export aborted to prevent saving blob URLs.`
+          );
         });
       conversionPromises.push(conversionPromise);
+    } else if (url && !url.startsWith("data:")) {
+      // Reject any URLs that are not base64 data URLs
+      throw new Error(
+        `Asset ${type} contains non-base64 data (${url.substring(
+          0,
+          50
+        )}...). Only base64 data URLs are allowed for export.`
+      );
     } else {
       // Keep as is (already base64 or other format)
       convertedAssets[type] = url;
@@ -1198,17 +1212,8 @@ async function buildExportData(includeAssets) {
   console.log("Tiling sprite exists:", !!tilingSprite);
 
   const itemsData = items.map((i) => {
-    const itemX = parseFloat(i.el.style.getPropertyValue("--item-x")) || 0;
-    const itemY = parseFloat(i.el.style.getPropertyValue("--item-y")) || 0;
-    const itemWidth =
-      parseFloat(i.el.style.getPropertyValue("--item-width")) ||
-      i.el.offsetWidth;
-    const itemHeight =
-      parseFloat(i.el.style.getPropertyValue("--item-height")) ||
-      i.el.offsetHeight;
-    const centerX = itemX + itemWidth / 2;
-    const bottomY = itemY + itemHeight;
-    const itemData = { id: i.id, type: i.type, x: centerX, y: bottomY };
+    // Item coordinates are already center-X, bottom-Y (matches export format)
+    const itemData = { id: i.id, type: i.type, x: i.x, y: i.y };
     if (i.flipped) {
       itemData.scaleX = -1;
     }
@@ -1327,14 +1332,32 @@ async function buildExportData(includeAssets) {
     // Store recovered assets back in the main pool for future use
     Object.assign(assetsPool, recoveredAssets);
 
-    // Convert object URLs to base64 data URLs for export
-    console.log("Converting assets for export...");
-    const convertedAssetsPool = await convertAssetsForExport(
-      completeAssetsPool
+    // Filter assets pool to only include used assets
+    const usedAssetsPool = {};
+    usedTypes.forEach((type) => {
+      if (completeAssetsPool[type]) {
+        usedAssetsPool[type] = completeAssetsPool[type];
+      }
+    });
+
+    console.log("Filtering assets for export...");
+    console.log(
+      "Total assets available:",
+      Object.keys(completeAssetsPool).length
     );
+    console.log("Used assets to export:", Object.keys(usedAssetsPool).length);
+    console.log(
+      "Filtered out unused assets:",
+      Object.keys(completeAssetsPool).length -
+        Object.keys(usedAssetsPool).length
+    );
+
+    // Convert object URLs to base64 data URLs for export
+    console.log("Converting used assets for export...");
+    const convertedAssetsPool = await convertAssetsForExport(usedAssetsPool);
     exportData.assets = convertedAssetsPool;
     console.log(
-      "Exported assets count:",
+      "Final exported assets count:",
       Object.keys(exportData.assets).length
     );
   }
@@ -1433,14 +1456,19 @@ function validateExportCompleteness(exportData) {
       );
     }
 
-    // Check for empty/invalid assets
+    // Check for empty/invalid assets - only base64 data URLs are allowed
     assetTypes.forEach((type) => {
       const asset = exportData.assets[type];
-      if (
-        !asset ||
-        (!asset.startsWith("data:") && !asset.startsWith("blob:"))
-      ) {
-        warnings.push(`Invalid or empty asset for type: ${type}`);
+      if (!asset) {
+        warnings.push(`Empty asset for type: ${type}`);
+      } else if (asset.startsWith("blob:")) {
+        warnings.push(
+          `CRITICAL: Blob URL detected for type: ${type} - export should be rejected!`
+        );
+      } else if (!asset.startsWith("data:")) {
+        warnings.push(
+          `Invalid asset format for type: ${type} - only base64 data URLs are allowed`
+        );
       }
     });
   }
@@ -1684,7 +1712,10 @@ async function loadScene(sceneData, imageFiles) {
       } else if (imageFile) {
         loadItem(itemData, imageFile);
       } else {
-        console.warn(`Image file not found for item type: ${itemData.type}`);
+        console.warn(
+          `!!! Image file not found for item type: ${itemData.type}`
+        );
+        itemData.orphan = true;
         // Still attempt to load if itemData contains embedded src (back-compat)
         loadItem(itemData, null);
       }
@@ -1768,6 +1799,12 @@ function loadItem(itemData, imageFile) {
 function createItemFromSrc(itemData, src) {
   const div = document.createElement("div");
   div.className = "item";
+
+  // Check if we have a valid src, if not use fallback base64 asset
+  if (!src || src === "" || src === "url()") {
+    src = getFallbackAsset(itemData.type);
+  }
+
   // Set image for CSS background-image and shadow
   div.style.setProperty("--item-image", `url(${src})`);
 
@@ -1781,12 +1818,9 @@ function createItemFromSrc(itemData, src) {
     div.style.setProperty("--item-width", imgWidth + "px");
     div.style.setProperty("--item-height", imgHeight + "px");
 
-    // Calculate left and top positions from center X and bottom Y
-    const leftPos = itemData.x - imgWidth / 2;
-    const topPos = itemData.y - imgHeight;
-
-    div.style.setProperty("--item-x", leftPos + "px");
-    div.style.setProperty("--item-y", topPos + "px");
+    // Store center X and bottom Y directly (matches export format)
+    div.style.setProperty("--item-x", itemData.x + "px");
+    div.style.setProperty("--item-y", itemData.y + "px");
 
     editor.appendChild(div);
 
@@ -1814,19 +1848,19 @@ function createItemFromSrc(itemData, src) {
     const item = {
       id: itemData.id,
       type: itemData.type,
-      x: leftPos,
-      y: topPos,
+      x: itemData.x, // Now stores center X
+      y: itemData.y, // Now stores bottom Y
       el: div,
       flipped: itemData.scaleX === -1,
       background: !!itemData.background,
       isometric: !!itemData.isometric,
     };
 
-    // Apply flip transform if item was flipped
+    // Apply flip transform if item was flipped (combine with translate)
     if (item.flipped) {
-      div.style.transform = "scaleX(-1)";
+      div.style.transform = "translate(-50%, -100%) scaleX(-1)";
     } else {
-      div.style.transform = "scaleX(1)";
+      div.style.transform = "translate(-50%, -100%)";
     }
 
     // Apply background class and z-index if item is marked as background
@@ -1845,8 +1879,32 @@ function createItemFromSrc(itemData, src) {
     updateItemHorizon(item);
   };
 
+  // Handle image load error - use fallback asset instead
+  tempImg.onerror = () => {
+    console.warn(
+      `Failed to load image for item type: ${itemData.type}, using fallback asset`
+    );
+    src = getFallbackAsset(itemData.type);
+    tempImg.src = src;
+  };
+
   // Start loading the image
   tempImg.src = src;
+}
+
+// Helper function to get or create fallback asset for missing item types
+function getFallbackAsset(itemType) {
+  // Base64 fallback image (1x1 transparent pixel)
+  const fallbackBase64 =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyAQMAAAAk8RryAAAAAXNSR0IB2cksfwAAAAlwSFlzAAALEwAACxMBAJqcGAAAAANQTFRF/wAAGeIJNwAAAAF0Uk5TlLeEjzsAAAAQSURBVHicY2SAAMZRelDQACloADOPuP3XAAAAAElFTkSuQmCC";
+
+  // Store in assets pool for this type if not already present
+  if (!assetsPool[itemType]) {
+    assetsPool[itemType] = fallbackBase64;
+    console.log(`Created fallback asset for item type: ${itemType}`);
+  }
+
+  return assetsPool[itemType];
 }
 
 function makeDraggable(el, item) {
@@ -1961,9 +2019,7 @@ function makeDraggable(el, item) {
 
       // Apply flip transform if original was flipped
       if (item.flipped) {
-        newImg.style.transform = "scaleX(-1)";
-      } else {
-        newImg.style.transform = "scaleX(1)";
+        newImg.style.transform += "scaleX(-1)";
       }
 
       items.push(duplicatedItem);
@@ -2375,3 +2431,209 @@ gridSizeInput.addEventListener("blur", (e) => {
 
 // Grid checkbox event listener
 gridCheckbox.addEventListener("change", toggleGrid);
+
+// Asset Management Functions
+let currentReplacingAssetType = null;
+
+// Function to count how many times each asset is used
+function getAssetUsageCounts() {
+  const usageCounts = {};
+
+  // Count usage in regular items
+  items.forEach((item) => {
+    usageCounts[item.type] = (usageCounts[item.type] || 0) + 1;
+  });
+
+  // Count usage in tiling sprite
+  if (tilingSprite && tilingSprite.type) {
+    usageCounts[tilingSprite.type] = (usageCounts[tilingSprite.type] || 0) + 1;
+  }
+
+  return usageCounts;
+}
+
+// Function to highlight all items of a specific asset type
+function highlightAssetType(assetType) {
+  // Highlight regular items
+  items.forEach((item) => {
+    if (item.type === assetType) {
+      item.el.classList.add("asset-highlighted");
+    }
+  });
+
+  // Highlight tiling sprite if it matches the type
+  if (tilingSprite && tilingSprite.type === assetType) {
+    tilingSprite.el.classList.add("asset-highlighted");
+  }
+}
+
+// Function to remove highlighting from all items
+function removeAssetHighlight() {
+  // Remove highlight from regular items
+  items.forEach((item) => {
+    item.el.classList.remove("asset-highlighted");
+  });
+
+  // Remove highlight from tiling sprite
+  if (tilingSprite) {
+    tilingSprite.el.classList.remove("asset-highlighted");
+  }
+}
+
+// Function to display assets in the panel
+function displayAssets() {
+  const usageCounts = getAssetUsageCounts();
+  assetList.innerHTML = "";
+
+  if (Object.keys(assetsPool).length === 0) {
+    assetList.innerHTML =
+      '<div class="asset-list-empty">No assets loaded</div>';
+    return;
+  }
+
+  Object.keys(assetsPool).forEach((assetType) => {
+    const assetUrl = assetsPool[assetType];
+    const usageCount = usageCounts[assetType] || 0;
+
+    const assetItem = document.createElement("div");
+    assetItem.className = "asset-item";
+
+    assetItem.innerHTML = `
+      <div class="asset-item-header">
+        <div class="asset-thumbnail" style="background-image: url('${assetUrl}')"></div>
+        <div class="asset-info">
+          <div class="asset-name">${assetType}</div>
+          <div class="asset-usage">Used ${usageCount} time${
+      usageCount !== 1 ? "s" : ""
+    }</div>
+        </div>
+      </div>
+      <div class="asset-actions">
+        <button class="asset-replace-btn" onclick="replaceAsset('${assetType}')">
+          🔄 Replace Asset
+        </button>
+      </div>
+    `;
+
+    // Add hover event listeners for highlighting
+    assetItem.addEventListener("mouseenter", () => {
+      highlightAssetType(assetType);
+    });
+
+    assetItem.addEventListener("mouseleave", () => {
+      removeAssetHighlight();
+    });
+
+    assetList.appendChild(assetItem);
+  });
+}
+
+// Function to open the asset manager panel
+function openAssetPanel() {
+  assetPanel.classList.add("open");
+  displayAssets();
+}
+
+// Function to close the asset manager panel
+function closeAssetPanelFunc() {
+  assetPanel.classList.remove("open");
+  // Remove any highlighting when closing the panel
+  removeAssetHighlight();
+}
+
+// Function to initiate asset replacement
+function replaceAsset(assetType) {
+  currentReplacingAssetType = assetType;
+  replaceAssetInput.click();
+}
+
+// Function to replace an asset
+function performAssetReplacement(file) {
+  if (!currentReplacingAssetType || !file) return;
+
+  // Create object URL for the new asset
+  const newObjectURL = URL.createObjectURL(file);
+  const oldAssetUrl = assetsPool[currentReplacingAssetType];
+
+  // Update the assets pool
+  assetsPool[currentReplacingAssetType] = newObjectURL;
+
+  // Load the new image to get its dimensions
+  const tempImg = new Image();
+  tempImg.onload = () => {
+    const newWidth = tempImg.naturalWidth;
+    const newHeight = tempImg.naturalHeight;
+
+    // Update all items using this asset type
+    items.forEach((item) => {
+      if (item.type === currentReplacingAssetType) {
+        // Update the image
+        item.el.style.setProperty("--item-image", `url(${newObjectURL})`);
+
+        // Update dimensions
+        item.el.style.setProperty("--item-width", newWidth + "px");
+        item.el.style.setProperty("--item-height", newHeight + "px");
+
+        // With new positioning system, coordinates are already center-X, bottom-Y
+        // so no recalculation needed - just keep the same position
+        // (The CSS transform handles the visual positioning)
+      }
+    });
+
+    // Update tiling sprite if it uses this asset type
+    if (tilingSprite && tilingSprite.type === currentReplacingAssetType) {
+      tilingSprite.el.style.backgroundImage = `url(${newObjectURL})`;
+      tilingSprite.el.style.backgroundSize = `${newWidth}px`;
+      tilingSprite.originalSrc = newObjectURL;
+    }
+
+    // Refresh the asset display
+    displayAssets();
+
+    console.log(
+      `Asset ${currentReplacingAssetType} replaced successfully with dimensions ${newWidth}x${newHeight}`
+    );
+
+    // Reset the replacing asset type
+    currentReplacingAssetType = null;
+  };
+
+  tempImg.onerror = () => {
+    console.error(
+      `Failed to load replacement asset for ${currentReplacingAssetType}`
+    );
+    // Reset the replacing asset type even on error
+    currentReplacingAssetType = null;
+  };
+
+  // Start loading the image
+  tempImg.src = newObjectURL;
+
+  // Clean up old object URL to prevent memory leaks
+  if (oldAssetUrl && oldAssetUrl.startsWith("blob:")) {
+    URL.revokeObjectURL(oldAssetUrl);
+  }
+}
+
+// Event listeners for asset management
+assetManagerBtn.addEventListener("click", openAssetPanel);
+closeAssetPanel.addEventListener("click", closeAssetPanelFunc);
+
+replaceAssetInput.addEventListener("change", (e) => {
+  if (e.target.files.length > 0) {
+    performAssetReplacement(e.target.files[0]);
+    // Clear the input to allow replacing the same asset multiple times
+    e.target.value = "";
+  }
+});
+
+// Close panel when clicking outside of it
+document.addEventListener("click", (e) => {
+  if (
+    assetPanel.classList.contains("open") &&
+    !assetPanel.contains(e.target) &&
+    !assetManagerBtn.contains(e.target)
+  ) {
+    closeAssetPanelFunc();
+  }
+});
