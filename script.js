@@ -2491,21 +2491,23 @@ function displayAssets() {
     return;
   }
 
-  Object.keys(assetsPool).forEach((assetType) => {
-    const assetUrl = assetsPool[assetType];
-    const usageCount = usageCounts[assetType] || 0;
+  Object.keys(assetsPool)
+    .sort()
+    .forEach((assetType) => {
+      const assetUrl = assetsPool[assetType];
+      const usageCount = usageCounts[assetType] || 0;
 
-    const assetItem = document.createElement("div");
-    assetItem.className = "asset-item";
+      const assetItem = document.createElement("div");
+      assetItem.className = "asset-item";
 
-    assetItem.innerHTML = `
+      assetItem.innerHTML = `
       <div class="asset-item-header">
         <div class="asset-thumbnail" style="background-image: url('${assetUrl}')"></div>
         <div class="asset-info">
           <div class="asset-name">${assetType}</div>
           <div class="asset-usage">Used ${usageCount} time${
-      usageCount !== 1 ? "s" : ""
-    }</div>
+        usageCount !== 1 ? "s" : ""
+      }</div>
         </div>
       </div>
       <div class="asset-actions">
@@ -2515,17 +2517,17 @@ function displayAssets() {
       </div>
     `;
 
-    // Add hover event listeners for highlighting
-    assetItem.addEventListener("mouseenter", () => {
-      highlightAssetType(assetType);
-    });
+      // Add hover event listeners for highlighting
+      assetItem.addEventListener("mouseenter", () => {
+        highlightAssetType(assetType);
+      });
 
-    assetItem.addEventListener("mouseleave", () => {
-      removeAssetHighlight();
-    });
+      assetItem.addEventListener("mouseleave", () => {
+        removeAssetHighlight();
+      });
 
-    assetList.appendChild(assetItem);
-  });
+      assetList.appendChild(assetItem);
+    });
 }
 
 // Function to open the asset manager panel
