@@ -2019,7 +2019,9 @@ function makeDraggable(el, item) {
 
       // Apply flip transform if original was flipped
       if (item.flipped) {
-        newImg.style.transform += "scaleX(-1)";
+        newImg.style.transform = "translate(-50%, -100%) scaleX(-1)";
+      } else {
+        newImg.style.transform = "translate(-50%, -100%)";
       }
 
       items.push(duplicatedItem);
